@@ -1,0 +1,25 @@
+From: phoenix port <fix@me>
+Subject: [PATCH] arm64: dts: qcom: sm7150-xiaomi-phoenix: enable Venus video codec
+
+Enable the video codec node and point it at the split-MDT firmware
+extracted from the stock vendor partition (shipped in the
+firmware-xiaomi-phoenix package).  Driver support for the
+"qcom,sm7150-venus" compatible lands in a separate patch.
+
+venus_mem reservation inherited from sm7150.dtsi.
+
+Signed-off-by: phoenix port <fix@me>
+---
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+@@ -345,6 +345,10 @@
+ };
+ 
+ &venus {
++	status = "okay";
++
++	/* Firmware split MDT straight from stock vendor partition, already
++	 * shipped in firmware-xiaomi-phoenix. */
+ 	firmware-name = "qcom/sm7150/phoenix/venus.mbn";
+ };
+ 

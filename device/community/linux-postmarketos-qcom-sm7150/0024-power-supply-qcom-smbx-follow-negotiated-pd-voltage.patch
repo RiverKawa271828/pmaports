@@ -1,0 +1,291 @@
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -20,6 +20,7 @@
+ #include <linux/of.h>
+ #include <linux/power_supply.h>
+ #include <linux/regmap.h>
++#include <linux/string.h>
+ #include <linux/types.h>
+ #include <linux/workqueue.h>
+ 
+@@ -125,6 +126,29 @@
+ 
+ #define USBIN_CURRENT_LIMIT_CFG				0x370
+ 
++/* DCDC page registers, reached through the charger peripheral base */
++#define DCDC_FSW_SEL					0x150
++#define DCDC_FSW_MASK					GENMASK(3, 0)
++
++#define SMBX_FSW_2400KHZ				0x7
++#define SMBX_FSW_2100KHZ				0x8
++#define SMBX_FSW_1600KHZ				0xb
++#define SMBX_FSW_1200KHZ				0xf
++
++/*
++ * Input over-voltage protection window. It must cover the negotiated
++ * USB-PD contract voltage or the charger latches PAUSE.
++ */
++#define USBIN_ADAPTER_ALLOW_CFG				0x360
++
++enum usbin_adapter_allow {
++	USBIN_ADAPTER_ALLOW_5V				= 0x0,
++	USBIN_ADAPTER_ALLOW_9V				= 0x2,
++	USBIN_ADAPTER_ALLOW_12V				= 0x4,
++	USBIN_ADAPTER_ALLOW_5V_TO_9V			= 0x8,
++	USBIN_ADAPTER_ALLOW_5V_OR_9V_TO_12V		= 0x7,
++};
++
+ #define USBIN_AICL_OPTIONS_CFG				0x380
+ #define SUSPEND_ON_COLLAPSE_USBIN_BIT			BIT(7)
+ #define USBIN_AICL_START_AT_MAX_BIT			BIT(5)
+@@ -208,6 +232,9 @@
+ #define CDP_CURRENT_UA					1500000
+ #define DCP_CURRENT_UA					1500000
+ #define CURRENT_MAX_UA					DCP_CURRENT_UA
++
++/* Interval for the USB-PD contract / fault-latch watchdog while online */
++#define PD_POLL_INTERVAL_MS				5000
+ /* clang-format on */
+ 
+ /*
+@@ -282,6 +309,13 @@
+ 	struct iio_channel *usb_in_v_chan;
+ 
+ 	struct power_supply *chg_psy;
++
++	/* USB-PD voltage following */
++	struct delayed_work pd_update_work;
++	struct notifier_block pd_nb;
++	char pd_psy_name[64];
++	unsigned int pd_allowance;
++	unsigned int pd_fsw;
+ };
+ 
+ struct smb_match_data {
+@@ -646,6 +680,196 @@
+ 	}
+ 
+ 	power_supply_changed(chip->chg_psy);
++
++	/*
++	 * Re-evaluate the PD contract on plug events too, in case the psy
++	 * notifier was registered after the contract was established.
++	 */
++	schedule_delayed_work(&chip->pd_update_work, 0);
++}
++
++static int smb_pd_find_psy(struct device *dev, void *data);
++
++static void smb_pd_update_work(struct work_struct *work)
++{
++	struct smb_chip *chip = container_of(to_delayed_work(work),
++					     struct smb_chip, pd_update_work);
++	unsigned int allow, fsw, vmax_uv = 0;
++	union power_supply_propval val = { 0 };
++	struct power_supply *psy;
++	unsigned int online = 0, stat;
++	bool have_psy = true;
++	int rc;
++
++	if (!chip->pd_psy_name[0]) {
++		/*
++		 * No notifier event seen yet (e.g. charger was already
++		 * plugged before we probed): look for the TCPM psy among
++		 * the sibling devices of our PMIC.
++		 */
++		bus_for_each_dev(&platform_bus_type, NULL, chip,
++				 smb_pd_find_psy);
++		if (!chip->pd_psy_name[0])
++			have_psy = false;
++	}
++
++	smb_get_prop_usb_online(chip, &online);
++
++	if (!have_psy) {
++		/* TCPM may still be probing; retry while input is present */
++		if (online)
++			goto reschedule;
++		return;
++	}
++
++	psy = power_supply_get_by_name(chip->pd_psy_name);
++	if (!psy) {
++		if (online)
++			goto reschedule;
++		return;
++	}
++
++	rc = power_supply_get_property(psy, POWER_SUPPLY_PROP_VOLTAGE_MAX,
++				       &val);
++	if (!rc && val.intval > 0)
++		vmax_uv = val.intval;
++	power_supply_put(psy);
++
++	if (chip->gen != SMB5)
++		return; /* PD voltage following only validated on SMB5 */
++
++	/*
++	 * Mirror downstream smb5-lib smblib_set_usb_pd_allowed_voltage() /
++	 * smblib_set_usb_pd_fsw(): switcher frequency and input OV window
++	 * must track the negotiated PD contract or USBIN_OV fires and
++	 * charging latches PAUSE. With no contract keep the reset default
++	 * window (5V or 9-12V), which also covers legacy DCP chargers.
++	 */
++	if (vmax_uv <= 5500000) {
++		allow = USBIN_ADAPTER_ALLOW_5V_OR_9V_TO_12V;
++		fsw = SMBX_FSW_2400KHZ;
++	} else if (vmax_uv < 9000000) {
++		allow = USBIN_ADAPTER_ALLOW_5V_TO_9V;
++		fsw = SMBX_FSW_2100KHZ;
++	} else if (vmax_uv < 12000000) {
++		allow = USBIN_ADAPTER_ALLOW_9V;
++		fsw = SMBX_FSW_1600KHZ;
++	} else {
++		allow = USBIN_ADAPTER_ALLOW_12V;
++		fsw = SMBX_FSW_1200KHZ;
++	}
++
++	/* FSW first, then widen/narrow the window, like downstream does */
++	if (allow != chip->pd_allowance || fsw != chip->pd_fsw) {
++		rc = regmap_update_bits(chip->regmap, chip->base + DCDC_FSW_SEL,
++					DCDC_FSW_MASK, fsw);
++		if (rc < 0) {
++			dev_err(chip->dev, "Couldn't set FSW for %u uV: %d\n",
++				vmax_uv, rc);
++			goto reschedule;
++		}
++
++		rc = regmap_write(chip->regmap,
++				  chip->base + USBIN_ADAPTER_ALLOW_CFG, allow);
++		if (rc < 0) {
++			dev_err(chip->dev,
++				"Couldn't set adapter allowance: %d\n", rc);
++			goto reschedule;
++		}
++
++		chip->pd_allowance = allow;
++		chip->pd_fsw = fsw;
++
++		dev_info(chip->dev,
++			 "PD follow: %u uV -> allowance 0x%02x fsw 0x%02x\n",
++			 vmax_uv, allow, fsw);
++	}
++
++	/*
++	 * A contract change while the input OV window was still wrong can
++	 * leave the charger latched in PAUSE/INHIBIT even after the window
++	 * is fixed (observed on PM6150), and AICL collapses can latch PAUSE
++	 * at runtime. Check on every pass and force a fresh charge cycle.
++	 */
++	if (online && chip->gen == SMB5) {
++		rc = regmap_read(chip->regmap,
++				 chip->base + BATTERY_CHARGER_STATUS_1, &stat);
++		if (rc >= 0) {
++			stat &= BATTERY_CHARGER_STATUS_MASK;
++			if (stat == SMB5_INHIBIT_CHARGE ||
++			    stat == SMB5_PAUSE_CHARGE ||
++			    stat == SMB5_DISABLE_CHARGE) {
++				dev_info(chip->dev,
++					 "PD follow: kicking charger out of status %u\n",
++					 stat);
++				regmap_update_bits(chip->regmap,
++						   chip->base + USBIN_CMD_IL,
++						   USBIN_SUSPEND_BIT, 0);
++				regmap_write(chip->regmap,
++					     chip->base + CHARGING_ENABLE_CMD,
++					     0);
++				usleep_range(1000, 2000);
++				regmap_write(chip->regmap,
++					     chip->base + CHARGING_ENABLE_CMD,
++					     CHARGING_ENABLE_CMD_BIT);
++			}
++		}
++	}
++
++reschedule:
++	/*
++	 * Keep re-checking while an input is present so that fault latches
++	 * are recovered and late contract changes get picked up; the loop
++	 * stops itself once the input goes away.
++	 */
++	schedule_delayed_work(&chip->pd_update_work,
++			      msecs_to_jiffies(PD_POLL_INTERVAL_MS));
++}
++
++static int smb_pd_find_psy(struct device *dev, void *data)
++{
++	struct smb_chip *chip = data;
++	struct power_supply *psy;
++	const char *name;
++
++	/* TCPM psy name is "tcpm-source-psy-" + the typec device name */
++	if (dev->parent != chip->dev->parent ||
++	    !str_has_prefix(dev_name(dev), "typec"))
++		return 0;
++
++	name = kasprintf(GFP_KERNEL, "tcpm-source-psy-%s", dev_name(dev));
++	if (!name)
++		return 0;
++
++	psy = power_supply_get_by_name(name);
++	if (!psy) {
++		kfree(name);
++		return 0;
++	}
++	power_supply_put(psy);
++
++	strscpy(chip->pd_psy_name, name, sizeof(chip->pd_psy_name));
++	dev_info(chip->dev, "tracking %s for PD voltage follow\n", name);
++	kfree(name);
++	return 1;
++}
++
++static int smb_pd_notifier_call(struct notifier_block *nb,
++				unsigned long ev, void *v)
++{
++	struct smb_chip *chip = container_of(nb, struct smb_chip, pd_nb);
++	struct power_supply *psy = v;
++
++	if (ev != PSY_EVENT_PROP_CHANGED || !psy || !psy->desc ||
++	    !psy->desc->name ||
++	    !str_has_prefix(psy->desc->name, "tcpm-source-psy"))
++		return NOTIFY_OK;
++
++	strscpy(chip->pd_psy_name, psy->desc->name,
++		sizeof(chip->pd_psy_name));
++	schedule_delayed_work(&chip->pd_update_work, 0);
++
++	return NOTIFY_OK;
+ }
+ 
+ static int smb_get_iio_chan(struct smb_chip *chip, struct iio_channel *chan,
+@@ -1259,6 +1483,29 @@
+ 		return dev_err_probe(chip->dev, rc,
+ 				     "Couldn't write fast AICL rerun time");
+ 
++	/*
++	 * Track USB-PD contract changes from the Type-C TCPM so that the
++	 * switcher frequency and the input OV window follow the negotiated
++	 * voltage.
++	 */
++	rc = devm_delayed_work_autocancel(chip->dev, &chip->pd_update_work,
++					  smb_pd_update_work);
++	if (rc)
++		return dev_err_probe(chip->dev, rc,
++				     "Failed to init PD update work\n");
++
++	chip->pd_nb.notifier_call = smb_pd_notifier_call;
++	rc = power_supply_reg_notifier(&chip->pd_nb);
++	if (rc < 0)
++		return dev_err_probe(chip->dev, rc,
++				     "Couldn't register PD notifier\n");
++
++	/*
++	 * The TCPM may have negotiated a contract before we registered the
++	 * notifier (charger probes late), so sync once unconditionally.
++	 */
++	schedule_delayed_work(&chip->pd_update_work, 0);
++
+ 	/* Initialise charger state */
+ 	schedule_delayed_work(&chip->status_change_work, 0);
+ 

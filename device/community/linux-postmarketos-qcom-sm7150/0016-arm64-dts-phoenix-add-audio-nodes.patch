@@ -1,0 +1,91 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: OpenCode <opencode@localhost>
+Date: Mon, 24 Aug 2026 00:00:00 +0000
+Subject: [PATCH] arm64: dts: qcom: phoenix: add audio nodes
+
+Wire up the speaker path: PRIMARY_MI2S (gpio49-52, playback data on
+SD0 per stock device tree) to the TFA9874 smart amplifier on i2c7
+(0xa84000), reset on tlmm66, interrupt on tlmm93.  The sound card is
+instantiated by the generic qcom sndcard machine driver
+("qcom,sm8250-sndcard"), same pattern as upstream sm7150-xiaomi-sweet.
+---
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts	2026-08-24 23:06:01.073675859 +0800
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+@@ -321,3 +321,77 @@
+ &venus {
+ 	firmware-name = "qcom/sm7150/phoenix/venus.mbn";
+ };
++
++/ {
++	sound {
++		compatible = "qcom,sm8250-sndcard";
++		model = "Xiaomi POCO X2";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pri_mi2s_active &pri_mi2s_ws_active>;
++
++		mm1-dai-link {
++			link-name = "MultiMedia1";
++			cpu {
++				sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
++			};
++		};
++
++		speaker_playback_dai {
++			link-name = "Primary Spkr Playback";
++			cpu {
++				sound-dai = <&q6afedai PRIMARY_MI2S_RX>;
++			};
++
++			platform {
++				sound-dai = <&q6routing>;
++			};
++
++			codec {
++				sound-dai = <&tfa9874>;
++			};
++		};
++	};
++};
++
++&i2c7 {
++	clock-frequency = <100000>;
++	status = "okay";
++
++	tfa9874: audio-codec@34 {
++		compatible = "nxp,tfa9874";
++		reg = <0x34>;
++
++		reset-gpios = <&tlmm 66 GPIO_ACTIVE_HIGH>;
++		irq-gpios = <&tlmm 93 GPIO_ACTIVE_HIGH>;
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&spkr_rst_default &spkr_int_default>;
++
++		#sound-dai-cells = <0>;
++	};
++};
++
++&tlmm {
++	spkr_rst_default: spkr-rst-default-state {
++		pins = "gpio66";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++		output-low;
++	};
++
++	spkr_int_default: spkr-int-default-state {
++		pins = "gpio93";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++		input-enable;
++	};
++};
++&q6afedai {
++	/* stock wiring: PRI_MI2S_RX playback data on SD0 (gpio52) */
++	qi2s@16 {
++		reg = <PRIMARY_MI2S_RX>;
++		qcom,sd-lines = <0>;
++	};
++};

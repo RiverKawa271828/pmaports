@@ -1,0 +1,4 @@
+# RTC on pm8941 is read-only (DT lacks allow-set-time), so without NTP the
+# clock resets every boot and timedated operations crawl. Enable the builtin
+# timesyncd; chrony has no systemd unit on this image.
+enable systemd-timesyncd.service

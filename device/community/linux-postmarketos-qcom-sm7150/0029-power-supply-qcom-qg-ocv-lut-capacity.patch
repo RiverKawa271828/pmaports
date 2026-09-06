@@ -1,0 +1,373 @@
+From: phoenix port <fix@me>
+Subject: [PATCH] power: supply: qcom_qg: software gauge from stock OCV/SOC LUT
+
+The gauge driver falls back to a linear interpolation between
+voltage_min_design and voltage_max_design, which makes the reported
+capacity jump +-5% while the battery is under load.  Stock firmware
+instead interpolates the open-circuit voltage against a per-profile
+OCV/SOC table indexed by battery temperature.
+
+Allow the battery profile LUT to be described in DT (qcom,ocv-temp-
+legend / qcom,ocv-soc-legend / qcom,ocv-lut-data).  Boards without
+the properties keep the linear estimate.
+
+The SRAM OCV (VOLTAGE_OCV) is only the last value the gauge learned
+and can be arbitrarily stale: it is re-learned solely when the battery
+relaxes, which never happens while plugged in.  After a deep discharge
+it stays pinned at the learned low value, so the reported capacity
+sticks at e.g. 5% while the terminal voltage already reads 4.1V and
+the battery keeps charging for hours.
+
+So with a LUT present, maintain a software estimate instead: while the
+average battery current is small (<=100mA) the terminal voltage
+approximates the true OCV and re-anchors the estimate against the LUT;
+in between, coulomb counting extrapolates from the last anchor, using
+the SRAM learned capacity (fallback: charge_full_design) as the
+reference.  This mirrors what the downstream qgauge algorithm does,
+without the persistence and resistance learning.
+
+For phoenix, add the stock battery profile extracted from the stock
+dtbo (G7BNVTBM4P_4500mAh, pc-temp-v2-lut, stock unit 100 uV converted
+to uV) as sm7150-xiaomi-phoenix-battery.dtsi.
+
+Signed-off-by: phoenix port <fix@me>
+---
+--- a/drivers/power/supply/qcom_qg.c
++++ b/drivers/power/supply/qcom_qg.c
+@@ -6,6 +6,8 @@
+ #include <linux/iio/consumer.h>
+ #include <linux/init.h>
+ #include <linux/kernel.h>
++#include <linux/math64.h>
++#include <linux/ktime.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+ #include <linux/of_address.h>
+@@ -32,6 +34,25 @@
+ /* |current| below this is treated as taper/no charge current */
+ #define QG_STATUS_CURRENT_MARGIN_UA	50000
+ 
++/* |average current| at or below this means the battery is relaxed and
++ * the terminal voltage can stand in for the open-circuit voltage */
++#define QG_RELAX_CURRENT_UA		100000
++
++/*
++ * Battery OCV/SOC lookup table supplied from the stock battery profile:
++ * a matrix of OCV (uV) indexed by SOC (rows, x100, descending) and
++ * temperature (columns, degC, ascending).  Stock firmware interpolates
++ * the measured open-circuit voltage against this table to estimate the
++ * state of charge.
++ */
++struct qcom_qg_lut {
++	s32 *temp;		/* degC, strictly ascending */
++	u32 *soc;		/* SOC x 100, descending */
++	u32 *ocv;		/* uV, num_soc rows x num_temp cols */
++	int num_temp;
++	int num_soc;
++};
++
+ struct qcom_qg_chip {
+ 	struct device *dev;
+ 	struct regmap *regmap;
+@@ -43,6 +64,13 @@
+ 	struct power_supply *batt_psy;
+ 	struct power_supply_battery_info *batt_info;
+ 
++	struct qcom_qg_lut lut;
++
++	/* software SOC state (see qcom_qg_capacity_from_lut) */
++	bool			soc_init;
++	s32			soc_est;	/* percent x 100 */
++	ktime_t			soc_last_sample;
++
+ 	const char *manufacturer;
+ 	char serial[16];
+ };
+@@ -108,11 +136,176 @@
+ 	return 0;
+ }
+ 
++static void qcom_qg_parse_lut(struct qcom_qg_chip *chip)
++{
++	struct qcom_qg_lut *lut = &chip->lut;
++	int n_temp, n_soc, n_data, i;
++
++	n_temp = of_property_count_u32_elems(chip->dev->of_node,
++					     "qcom,ocv-temp-legend");
++	n_soc = of_property_count_u32_elems(chip->dev->of_node,
++					    "qcom,ocv-soc-legend");
++	n_data = of_property_count_u32_elems(chip->dev->of_node,
++					     "qcom,ocv-lut-data");
++	if (n_temp < 2 || n_soc < 2 || n_data != n_temp * n_soc)
++		return; /* no usable LUT: keep the linear estimation */
++
++	lut->temp = devm_kcalloc(chip->dev, n_temp, sizeof(*lut->temp),
++				 GFP_KERNEL);
++	lut->soc = devm_kcalloc(chip->dev, n_soc, sizeof(*lut->soc),
++				GFP_KERNEL);
++	lut->ocv = devm_kcalloc(chip->dev, n_data, sizeof(*lut->ocv),
++				GFP_KERNEL);
++	if (!lut->temp || !lut->soc || !lut->ocv)
++		return;
++
++	if (of_property_read_u32_array(chip->dev->of_node,
++				       "qcom,ocv-lut-data",
++				       lut->ocv, n_data) ||
++	    of_property_read_u32_array(chip->dev->of_node,
++				       "qcom,ocv-soc-legend",
++				       lut->soc, n_soc))
++		return;
++
++	for (i = 0; i < n_temp; i++) {
++		u32 t;
++
++		if (of_property_read_u32_index(chip->dev->of_node,
++					       "qcom,ocv-temp-legend",
++					       i, &t))
++			return;
++		lut->temp[i] = (s32)t;
++		if (i && lut->temp[i] <= lut->temp[i - 1])
++			return; /* legend must be strictly ascending */
++	}
++
++	lut->num_temp = n_temp;
++	lut->num_soc = n_soc;
++
++	dev_dbg(chip->dev, "battery OCV/SOC LUT: %d rows x %d cols\n",
++		n_soc, n_temp);
++}
++
++/* OCV of a SOC row, interpolated across the temperature columns */
++static int qcom_qg_lut_row_ocv(const struct qcom_qg_lut *lut,
++			       int row, int col, int degc)
++{
++	int ocv = lut->ocv[row * lut->num_temp + col];
++
++	if (col + 1 < lut->num_temp) {
++		int next = lut->ocv[row * lut->num_temp + col + 1];
++		int span = lut->temp[col + 1] - lut->temp[col];
++
++		ocv += (next - ocv) * (degc - lut->temp[col]) / span;
++	}
++
++	return ocv;
++}
++
++/* SOC (percent x 100) for an OCV/temperature pair, from the LUT */
++static int qcom_qg_lut_soc(const struct qcom_qg_lut *lut, int ocv_uv,
++			   int degc, s32 *soc)
++{
++	int col, row;
++
++	degc = clamp_t(int, degc, lut->temp[0], lut->temp[lut->num_temp - 1]);
++	for (col = 0; col < lut->num_temp - 2 && degc > lut->temp[col + 1];
++	     col++)
++		;
++
++	/* Find the SOC rows bracketing the measured OCV at this temperature */
++	for (row = 0; row < lut->num_soc - 1; row++) {
++		int ocv_hi = qcom_qg_lut_row_ocv(lut, row, col, degc);
++		int ocv_lo = qcom_qg_lut_row_ocv(lut, row + 1, col, degc);
++
++		if (ocv_uv >= ocv_lo) {
++			if (ocv_uv >= ocv_hi)
++				*soc = lut->soc[row];
++			else
++				*soc = lut->soc[row] +
++				       ((int)lut->soc[row + 1] - (int)lut->soc[row]) *
++				       (ocv_uv - ocv_hi) / (ocv_lo - ocv_hi);
++			return 0;
++		}
++	}
++
++	*soc = 0;
++	return 0;
++}
++
++static int qcom_qg_charge_full_uah(struct qcom_qg_chip *chip, int *uah)
++{
++	int ret, raw = 0;
++
++	ret = regmap_raw_read(chip->regmap, QG_SRAM_BASE +
++			      QG_SDAM_LEARNED_CAPACITY_OFFSET, &raw, 2);
++	if (!ret) {
++		*uah = (raw & 0xffff) * 1000; /* mAh to uAh */
++		if (*uah > 0)
++			return 0;
++	}
++
++	*uah = chip->batt_info->charge_full_design_uah;
++	return 0;
++}
++
+ /*
+- * Yes, this function simply calculates the capacity based on
+- * the current voltage. This will be rewritten in the future.
++ * The OCV held in SRAM is only the last value the gauge learned, and it
++ * can be arbitrarily stale: it is re-learned solely when the battery
++ * relaxes, which never happens while plugged in and may not happen for
++ * a long time otherwise.  Trusting it pins the reported capacity to a
++ * fixed number -- e.g. a deep discharge learns a low OCV that sticks
++ * even as the battery recharges.
++ *
++ * So instead of trusting it, maintain a software estimate: while the
++ * average current is small the terminal voltage approximates the true
++ * OCV and re-anchors the estimate; in between, coulomb counting
++ * extrapolates from the last anchor.
+  */
+-static int qcom_qg_get_capacity(struct qcom_qg_chip *chip, int *val)
++static int qcom_qg_capacity_from_lut(struct qcom_qg_chip *chip, int *val)
++{
++	int iavg, vavg, degc, ret;
++	ktime_t now;
++
++	ret = qcom_qg_get_voltage(chip, QG_S2_NORMAL_AVG_V_DATA0_REG, &vavg);
++	if (ret)
++		return ret;
++
++	ret = qcom_qg_get_current(chip, QG_S2_NORMAL_AVG_I_DATA0_REG, &iavg);
++	if (ret)
++		return ret;
++
++	if (iio_read_channel_processed(chip->batt_therm_chan, &degc) < 0)
++		degc = 25000; /* no temperature reading: assume 25 degC */
++	degc /= 1000;
++
++	now = ktime_get_boottime();
++
++	if (!chip->soc_init || abs(iavg) <= QG_RELAX_CURRENT_UA) {
++		ret = qcom_qg_lut_soc(&chip->lut, vavg, degc, &chip->soc_est);
++		if (ret)
++			return ret;
++	} else {
++		int cf_uah;
++		s64 ua_ms;
++
++		qcom_qg_charge_full_uah(chip, &cf_uah);
++		ua_ms = (s64)iavg * ktime_ms_delta(now, chip->soc_last_sample);
++		/*
++		 * percent x 100 = uA * ms / 3600000 / uAh * 10000
++		 *               = uA * ms / (360 * uAh)
++		 */
++		chip->soc_est += div64_s64(ua_ms, (s64)cf_uah * 360);
++	}
++
++	chip->soc_last_sample = now;
++	chip->soc_init = true;
++
++	*val = clamp_t(s32, DIV_ROUND_CLOSEST(chip->soc_est, 100), 0, 100);
++	return 0;
++}
++
++static int qcom_qg_capacity_from_voltage(struct qcom_qg_chip *chip, int *val)
+ {
+ 	int ret, voltage_now;
+ 	int voltage_min = chip->batt_info->voltage_min_design_uv;
+@@ -136,6 +329,20 @@
+ 	return 0;
+ }
+ 
++/*
++ * With a battery profile LUT the capacity comes from a software gauge
++ * anchored on the terminal voltage (see qcom_qg_capacity_from_lut).
++ * Otherwise this falls back to simply calculating the capacity from the
++ * current voltage.
++ */
++static int qcom_qg_get_capacity(struct qcom_qg_chip *chip, int *val)
++{
++	if (chip->lut.ocv)
++		return qcom_qg_capacity_from_lut(chip, val);
++
++	return qcom_qg_capacity_from_voltage(chip, val);
++}
++
+ static int qcom_qg_get_status(struct qcom_qg_chip *chip, int *val)
+ {
+ 	union power_supply_propval prop = { 0 };
+@@ -331,6 +538,9 @@
+ 		return dev_err_probe(chip->dev, PTR_ERR(chip->batt_therm_chan),
+ 				     "Couldn't get batt-therm IIO channel\n");
+ 
++	/* Optional stock-profile OCV/SOC table: replaces the linear estimate */
++	qcom_qg_parse_lut(chip);
++
+ 	psy_cfg.drv_data = chip;
+ 	psy_cfg.fwnode = dev_fwnode(chip->dev);
+ 
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+@@ -6,6 +6,7 @@
+ /dts-v1/;
+ 
+ #include "sm7150-xiaomi-common.dtsi"
++#include "sm7150-xiaomi-phoenix-battery.dtsi"
+ 
+ /delete-node/ &adsp_mem;
+ /delete-node/ &wlan_msa_mem;
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix-battery.dtsi
+@@ -0,0 +1,65 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Stock battery profile for Xiaomi POCO X2 (phoenix), battery
++ * G7BNVTBM4P_4500mAh (BAT_ID ~100 kOhm).  Values extracted from the
++ * stock dtbo (fdt-05) pc-temp-v2-lut; stock stores OCV in units of
++ * 100 uV, converted to uV here.  Rows = SOC * 100 (descending),
++ * columns = temperature degC (ascending).  Consumed by qcom_qg to
++ * estimate capacity from open-circuit voltage like stock does.
++ */
++
++&pm6150_qgauge {
++	/* Stock battery profile LUT (G7BNVTBM4P_4500mAh, extracted from
++	 * stock dtbo fdt-05; OCV uV indexed by SOC x100 rows x temp degC cols).
++	 * Replaces the voltage-linear capacity estimate. */
++	qcom,ocv-temp-legend = <(-10) 0 10 25 40 50>;
++	qcom,ocv-soc-legend = <						10000 9800 9600 9400 9200 9000 8800 8600
++						8400 8200 8000 7800 7600 7400 7200 7000
++						6800 6600 6400 6200 6000 5800 5600 5400
++						5200 5000 4800 4600 4400 4200 4000 3800
++						3600 3400 3200 3000 2800 2600 2400 2200
++						2000 1800 1600 1400 1200 1000 900 800
++						700 600 500 400 300 200 100 0>;
++	qcom,ocv-lut-data = <						4387500 4385000 4383000 4381500 4376500 4375000 4355000 4353500
++						4355600 4355700 4351100 4349500 4324600 4323900 4329200 4330500
++						4326300 4324700 4296800 4296600 4303700 4306000 4302200 4300600
++						4271400 4271500 4279300 4282300 4278900 4277500 4246900 4247000
++						4255200 4258700 4255700 4254400 4222700 4222500 4231400 4235200
++						4232300 4231100 4199100 4198400 4207800 4211800 4208900 4207800
++						4175900 4174600 4184700 4188800 4186000 4184900 4153000 4150700
++						4162000 4166200 4163300 4162200 4131200 4128500 4139800 4143800
++						4140900 4139800 4112100 4109300 4118600 4121700 4118900 4117800
++						4093800 4091200 4097800 4099900 4097300 4096300 4072400 4070400
++						4077100 4079300 4076600 4075600 4047300 4046900 4056500 4059600
++						4056700 4055300 4020500 4023300 4036100 4040000 4037200 4035900
++						3990300 4000700 4016000 4019400 4017800 4017300 3959900 3978800
++						3996300 3999300 3999100 3999400 3938700 3958300 3977100 3982200
++						3982100 3982500 3923900 3939000 3958500 3967800 3967300 3967000
++						3910100 3920200 3939100 3951200 3950500 3949700 3895300 3900800
++						3916700 3927100 3927000 3926600 3880500 3882000 3894200 3901300
++						3901800 3901900 3865400 3866300 3876700 3882200 3882900 3883200
++						3849400 3852800 3862400 3866700 3867800 3868100 3835800 3840500
++						3849800 3853600 3854900 3855200 3826400 3828100 3838500 3842300
++						3843600 3843800 3818800 3816900 3828400 3832400 3833600 3833700
++						3811900 3808900 3819200 3823400 3824400 3824400 3805600 3803000
++						3810700 3815100 3815900 3815700 3800000 3798100 3803100 3807500
++						3808200 3807900 3794900 3793600 3795700 3800300 3801400 3801100
++						3790100 3789500 3789200 3793700 3795100 3794700 3785400 3785900
++						3784600 3787600 3788600 3787900 3780800 3782900 3781400 3782200
++						3782200 3780900 3776200 3779500 3777900 3776500 3774900 3772800
++						3771300 3775100 3774000 3770200 3765500 3761900 3766200 3769700
++						3769600 3763400 3755200 3750000 3760400 3763700 3763800 3756100
++						3746400 3740700 3754000 3756800 3756300 3748300 3738700 3733200
++						3746600 3748700 3747400 3739600 3730600 3725200 3736900 3738100
++						3736600 3729800 3721700 3716000 3725500 3725300 3724100 3718600
++						3711400 3705300 3714300 3710300 3709400 3704700 3697200 3691300
++						3704400 3696300 3696300 3692800 3686200 3680100 3696300 3687000
++						3689000 3687100 3681600 3676100 3692500 3683500 3686600 3686000
++						3680300 3675300 3688500 3680200 3684400 3684000 3679000 3673900
++						3683700 3675500 3680800 3681300 3676800 3671100 3676200 3667400
++						3673300 3673600 3669000 3661900 3657700 3647500 3651000 3646300
++						3639700 3628900 3618200 3606500 3601600 3595300 3590500 3579000
++						3558200 3545800 3536400 3530000 3526800 3513900 3473200 3460700
++						3447900 3439300 3439400 3426100 3336500 3321900 3312300 3305400
++						3308100 3292200 2858300 2857000 2811400 2812000 2877100 2859700>;
++};

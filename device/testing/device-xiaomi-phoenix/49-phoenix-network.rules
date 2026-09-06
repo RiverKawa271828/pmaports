@@ -1,0 +1,11 @@
+// Allow wheel-group users full NetworkManager control (wifi scan/connect,
+// settings, enable/disable). Without this the plasma-nm applet and plain
+// `nmcli` get "Not authorized to control networking" on systemd images,
+// because greetd sessions are not flagged active by polkit.
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
+        action.id.indexOf("org.freedesktop.NetworkManager.checkpoint-rollback") !== 0 &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

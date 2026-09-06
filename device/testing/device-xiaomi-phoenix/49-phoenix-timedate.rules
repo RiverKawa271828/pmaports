@@ -1,0 +1,10 @@
+// Allow the active local session (plasma-mobile Settings) to manage time,
+// timezone and NTP toggles without an interactive polkit dialog. Without
+// this the GUI blocks waiting for an auth prompt that renders poorly on
+// a phone screen, looking like a frozen settings panel.
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.timedate1.") == 0 &&
+        subject.local && subject.active) {
+        return polkit.Result.YES;
+    }
+});

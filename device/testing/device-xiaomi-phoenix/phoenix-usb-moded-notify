@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+# # Copyright 2025 Clayton Craft
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+import gi
+import dbus
+from time import sleep
+from dbus.mainloop.glib import DBusGMainLoop
+
+gi.require_version('Notify', '0.7')
+from gi.repository import GLib, Notify  # noqa: E402
+from gi.repository.GLib import GError
+
+DBusGMainLoop(set_as_default=True)
+Notify.init("USB Mode Selector")
+
+bus = dbus.SystemBus()
+notification = None
+
+
+mode_labels = {
+    "charging_only": "Charging",
+    "ask": "Charging",
+    "developer_mode": "Developer",
+    "mass_storage": "Mass Storage", # usb-moded
+    "mass_storage_mode": "Mass Storage", # usb-signaller
+    "cdrom_mode": "CD-ROM",
+    "mtp_ffs_mode": "MTP",
+    "aoa_ffs_mode": "AOA",
+    "tethering_mode": "Tethering",
+}
+
+
+def is_locked():
+    try:
+        system_bus = dbus.SystemBus()
+        logind = system_bus.get_object(
+            "org.freedesktop.login1", "/org/freedesktop/login1"
+        )
+        manager = dbus.Interface(logind, "org.freedesktop.login1.Manager")
+
+        for session in manager.ListSessions():
+            # session[3] is the seat name - only check sessions with a seat to
+            # avoid checking SSH sessions or something
+            if session[3]:
+                session_obj = system_bus.get_object(
+                    "org.freedesktop.login1", session[4]
+                )
+                props = dbus.Interface(session_obj, "org.freedesktop.DBus.Properties")
+                if props.Get("org.freedesktop.login1.Session", "LockedHint"):
+                    return True
+        return False
+    except Exception as e:
+        print(f"Lock check failed: {e}")
+        # It's probably safer to not show the notification in this case, to
+        # avoid the check failing and the notification showing on the lockscreen
+        return True
+
+
+def get_modes():
+    obj = bus.get_object("com.meego.usb_moded", "/com/meego/usb_moded")
+    iface = dbus.Interface(obj, "com.meego.usb_moded")
+    result = iface.get_modes()
+    # get_modes returns a single comma-separated string, not an array
+    if isinstance(result, str):
+        return [m.strip() for m in result.split(",")]
+    return list(result)
+
+
+def get_current_mode():
+    mode = "busy"
+    tries = 0
+    while (mode == "busy" and tries < 20):
+        obj = bus.get_object("com.meego.usb_moded", "/com/meego/usb_moded")
+        iface = dbus.Interface(obj, "com.meego.usb_moded")
+        mode = iface.mode_request()
+        sleep(0.5)
+        tries += 1
+    return mode
+
+
+def set_mode(mode):
+    print(f"Setting mode: {mode}")
+    obj = bus.get_object("com.meego.usb_moded", "/com/meego/usb_moded")
+    iface = dbus.Interface(obj, "com.meego.usb_moded")
+    iface.set_mode(mode)
+
+
+def on_action(notification, action, user_data):
+    print(f"Action clicked: {action}")
+    set_mode(action)
+    notification.close()
+    show_notification()
+
+
+def show_notification():
+    global notification
+
+    if is_locked():
+        print("Screen locked, skipping notification")
+        return
+
+    # Close existing notification
+    if notification:
+        notification.close()
+
+    # Try to determine current and available USB modes
+    try:
+        modes = get_modes()
+        print(f"Available modes: {modes}")
+
+        current_mode = get_current_mode()
+        print(f"Current mode: {current_mode}")
+
+        if (label := mode_labels.get(current_mode)) is None:
+            label = current_mode
+
+        notification = Notify.Notification.new(f"USB {label} mode", "Select mode to change USB connection.", None)
+        notification.set_urgency(Notify.Urgency.NORMAL)
+        notification.set_app_icon("drive-harddisk-usb-symbolic")
+        notification.set_hint("x-phosh-fb-profile", GLib.Variant.new_string("none"))
+
+        for mode in modes:
+            if mode == current_mode:
+                continue
+            if current_mode == "ask" and mode == "charging_only":
+                continue
+
+            if (label := mode_labels.get(mode)) is None:
+                label = mode
+            notification.add_action(mode, label, on_action, None)
+    except Exception:
+        print(f"Retrieving available modes and current mode failed")
+        notification = Notify.Notification.new(f"Unknown USB mode", "Unable to determine current and available USB modes.", None)
+        notification.set_urgency(Notify.Urgency.NORMAL)
+        notification.set_app_icon("dialog-warning-symbolic")
+        notification.set_hint("x-phosh-fb-profile", GLib.Variant.new_string("none"))
+
+    # Try again when rate-limited by notification server
+    try:
+        notification.show()
+    except GError as error:
+        # 36 is GDBus.Error:org.freedesktop.Notifications.Error.ExcessNotificationGeneration
+        if error.code != 36:
+            raise
+
+        print("Failed to show a notification due to rate-limiting, trying again in a second")
+        sleep(1)
+        show_notification()
+
+
+def close_notification():
+    global notification
+    if notification:
+        print("Closing notification")
+        notification.close()
+        notification = None
+
+
+def signal_handler(event):
+    print(f"Event: {event}")
+    if event == "mode_requested_show_dialog":
+        show_notification()
+    elif event == "USB connected":
+        # usb-signaller emits "USB connected" for *any* typec udev add
+        # event -- including DCP/PD wall chargers that carry no data at
+        # all. Only show the selector when a data-capable connection is
+        # actually present (BC1.2 SDP/CDP detection can lag the typec
+        # attach, so poll briefly before giving up).
+        if data_connection_present():
+            show_notification()
+        else:
+            print("Power-only connection (no SDP/CDP detected), skipping selector")
+            close_notification()
+    elif event == "USB disconnected":
+        close_notification()
+
+
+def data_connection_present():
+    """True when a charger PSY reports a data-capable USB type (SDP/CDP).
+
+    PD is deliberately excluded: on this port PD partners are almost
+    always power bricks, while PD data hosts are rare. Trade-off
+    documented in the device APKBUILD.
+    """
+    import glob
+    import re
+
+    for _ in range(8):
+        for path in glob.glob("/sys/class/power_supply/*/usb_type"):
+            try:
+                with open(path) as f:
+                    content = f.read()
+            except OSError:
+                continue
+            if re.search(r"\[(SDP|CDP)\]", content):
+                return True
+        sleep(0.5)
+    return False
+
+
+bus.add_signal_receiver(
+    signal_handler,
+    dbus_interface="com.meego.usb_moded",
+    signal_name="sig_usb_event_ind",
+)
+
+print("Monitoring USB events...")
+if data_connection_present():
+    show_notification()
+else:
+    print("No data-capable connection at startup, skipping initial dialog")
+loop = GLib.MainLoop()
+loop.run()

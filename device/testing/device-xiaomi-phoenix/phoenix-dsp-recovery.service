@@ -1,0 +1,15 @@
+[Unit]
+Description=Reboot once to converge out of the probabilistic DSP degraded boot state
+# Wait until the DSP service chain has settled before judging. multi-user.target
+# + this timeout puts us at ~100s after boot, well past APR registration (+0.4s)
+# and hexagonrpcd INIT_ATTACH (~28s), so a healthy boot is never misjudged.
+After=multi-user.target
+ConditionPathExists=/usr/bin/ssccli
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/phoenix-dsp-recovery.sh
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,110 @@
+From: phoenix port <fix@me>
+Subject: [PATCH] media: venus: add support for SM7150 video core
+
+The SM7150 (Snapdragon 730G) video subsystem is an AR50 / HFI v4 core
+like SC7180, built around dual MVS codecs plus the MVSC scalar.
+
+Add a matching resource structure and of_match entry so the
+"qcom,sm7150-venus" node in sm7150.dtsi actually binds.  Bind one
+vcodec instance (venus + vcodec0 GDSCs, mvs0 core/axi clocks), the
+same shape official upstream uses for the SM6150 silicon (qcs615);
+the dual-codec wiring of the second MVS block proved lethal at probe
+(three consecutive pre-userspace deaths while the identical kernel
+with the old device tree boots fine), so leave it unused for now.
+
+While at it, extend the video-codec register space in sm7150.dtsi to
+0x100000 like on QCS615.  Switching the IOMMU stream spec to the stock
+sm6150 venus_ns value (0xe60/0x20) was also attempted and took the
+board down before userspace on every boot, so the mainline 0x1080/0x60
+spec stays for now; the real stream assignment still needs to be
+established from the downstream SMMU description.
+
+Signed-off-by: phoenix port <fix@me>
+---
+--- a/drivers/media/platform/qcom/venus/core.c
++++ b/drivers/media/platform/qcom/venus/core.c
+@@ -949,6 +949,56 @@
+ 	.enc_nodename = "video-encoder",
+ };
+ 
++static const struct freq_tbl sm7150_freq_table[] = {
++	{ 0, 533000000 },
++	{ 0, 444000000 },
++	{ 0, 365000000 },
++	{ 0, 338000000 },
++	{ 0, 240000000 },
++};
++
++static const struct bw_tbl sm7150_bw_table_enc[] = {
++	{  972000,  750000, 0, 0, 0 },	/* 3840x2160@30 */
++	{  489600,  451000, 0, 0, 0 },	/* 1920x1080@60 */
++	{  244800,  234000, 0, 0, 0 },	/* 1920x1080@30 */
++};
++
++static const struct bw_tbl sm7150_bw_table_dec[] = {
++	{ 1036800, 1386000, 0, 1875000, 0 },	/* 4096x2160@30 */
++	{  489600,  865000, 0, 1146000, 0 },	/* 1920x1080@60 */
++	{  244800,  530000, 0,  583000, 0 },	/* 1920x1080@30 */
++};
++
++static const struct venus_resources sm7150_res = {
++	.freq_tbl = sm7150_freq_table,
++	.freq_tbl_size = ARRAY_SIZE(sm7150_freq_table),
++	.bw_tbl_enc = sm7150_bw_table_enc,
++	.bw_tbl_enc_size = ARRAY_SIZE(sm7150_bw_table_enc),
++	.bw_tbl_dec = sm7150_bw_table_dec,
++	.bw_tbl_dec_size = ARRAY_SIZE(sm7150_bw_table_dec),
++	.clks = {"core", "iface", "bus" },
++	.clks_num = 3,
++	.vcodec0_clks = { "vcodec0_core", "vcodec0_bus" },
++	.vcodec_clks_num = 2,
++	.vcodec_pmdomains = (const char *[]) { "venus", "vcodec0" },
++	.vcodec_pmdomains_num = 2,
++	.opp_pmdomain = (const char *[]) { "cx" },
++	.vcodec_num = 1,
++	.hfi_version = HFI_VERSION_4XX,
++	.vpu_version = VPU_VERSION_AR50,
++	.vmem_id = VIDC_RESOURCE_NONE,
++	.vmem_size = 0,
++	.vmem_addr = 0,
++	.dma_mask = 0xe0000000 - 1,
++	.cp_start = 0,
++	.cp_size = 0x70800000,
++	.cp_nonpixel_start = 0x1000000,
++	.cp_nonpixel_size = 0x24800000,
++	.fwname = "qcom/venus-5.4/venus.mbn",
++	.dec_nodename = "video-decoder",
++	.enc_nodename = "video-encoder",
++};
++
+ static const struct freq_tbl sm8250_freq_table[] = {
+ 	{ 0, 444000000 },
+ 	{ 0, 366000000 },
+@@ -1129,6 +1179,7 @@
+ 	{ .compatible = "qcom,sdm660-venus", .data = &sdm660_res, },
+ 	{ .compatible = "qcom,sdm845-venus", .data = &sdm845_res, },
+ 	{ .compatible = "qcom,sdm845-venus-v2", .data = &sdm845_res_v2, },
++	{ .compatible = "qcom,sm7150-venus", .data = &sm7150_res, },
+ 	{ .compatible = "qcom,sm8250-venus", .data = &sm8250_res, },
+ 	{ }
+ };
+--- a/arch/arm64/boot/dts/qcom/sm7150.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150.dtsi
+@@ -3530,7 +3530,7 @@
+ 
+ 		venus: video-codec@aa00000 {
+ 			compatible = "qcom,sm7150-venus";
+-			reg = <0 0x0aa00000 0 0xff000>;
++			reg = <0 0x0aa00000 0 0x100000>;
+ 
+ 			interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+ 
+@@ -3569,6 +3569,8 @@
+ 
+ 			memory-region = <&venus_mem>;
+ 
++			/* keep the mainline stream spec; 0xe60 (stock sm6150
++			 * venus_ns) proved lethal on sm7150 -- see 0030 notes */
+ 			iommus = <&apps_smmu 0x1080 0x60>;
+ 
+ 			status = "disabled";

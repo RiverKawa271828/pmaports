@@ -1,0 +1,34 @@
+#!/bin/sh
+set -e
+
+# msm-modem-uim-selection used to fail when modem firmware was unavailable
+# and its RequiredBy= relationship dragged ModemManager down with it. The
+# modem is fully wired up now (soc-qcom-modem + split zap GPU era), so keep
+# the Requires= link removed (it races MM at boot) but let the unit run on
+# its own: it selects the SIM slot/session once the modem is up. It runs
+# early and may miss the modem; a retry drop-in covers that.
+rm -f /etc/systemd/system/ModemManager.service.requires/msm-modem-uim-selection.service
+rm -f /etc/systemd/system/msm-modem-uim-selection.service
+
+if command -v systemctl >/dev/null 2>&1; then
+	# Pick up the /dev/null mask above and any unit-file changes shipped
+	# by this upgrade. Without daemon-reload, masking is a no-op until
+	# next boot when run against a live (non-chroot) system.
+	systemctl daemon-reload >/dev/null 2>&1 || true
+	# Make sure the [Install] wants-symlinks reflect the current unit
+	# file. systemctl start would race with the service ordering against
+	# NetworkManager (Before=) so we skip it; the unit fires at next
+	# boot. Direct invocation here would race the systemd-started copy.
+	systemctl reenable phoenix-wlan-mac.service >/dev/null 2>&1 || true
+	# RTC is read-only; keep NTP enabled so the clock survives reboots.
+	systemctl reenable systemd-timesyncd.service >/dev/null 2>&1 || true
+	# Reboot once to converge out of the probabilistic DSP degraded state.
+	systemctl enable phoenix-dsp-recovery.service >/dev/null 2>&1 || true
+	# Cap input current on misclassified SDP ports (battery drain fix).
+	systemctl reenable phoenix-sdp-cap.timer >/dev/null 2>&1 || true
+fi
+
+# Compile dconf defaults so notification policy is active after install.
+if command -v dconf >/dev/null 2>&1; then
+	dconf update >/dev/null 2>&1 || true
+fi

@@ -1,0 +1,4 @@
+# SDP input-current cap protects the battery on strict PC ports (the
+# source of the 2026-09 "plugged in but drained anyway" report), enable
+# the timer by default.
+enable phoenix-sdp-cap.timer

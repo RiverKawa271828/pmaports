@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: OpenCode <opencode@localhost>
+Date: Mon, 25 Aug 2026 00:00:00 +0000
+Subject: [PATCH] ASoC: tfa987x: add speaker gain control
+
+Expose the TDMSPKG bitfield (TDM_CFG8 reg 0x61, bits 9:6) as a
+"Speaker Driver Playback Volume" control: 6 dB base + 1 dB per step,
+matching the semantics used by the vendor driver for TFA9872/9874.
+
+On phoenix (TFA9874) the register is freely writeable after the soft
+reset done in probe, so a plain SOC_SINGLE_TLV is enough.
+---
+--- a/sound/soc/codecs/tfa9872.c
++++ b/sound/soc/codecs/tfa9872.c
+@@ -10,6 +10,7 @@
+ #include <linux/module.h>
+ #include <linux/regmap.h>
+ #include <sound/soc.h>
++#include <sound/tlv.h>
+ 
+ #define TFA987X_SYS_CTRL0		0x00
+ #define TFA987X_SYS_CTRL0_PWDN_MSK	BIT(0)
+@@ -109,11 +110,25 @@
+ 	{"Speaker", NULL, "PWUP"},
+ };
+ 
++/*
++ * TDMSPKG, the TDM to amplifier gain: 6 dB base + 1 dB per step.
++ * The register is freely writeable after the soft reset done in probe,
++ * no hide key dance needed.
++ */
++static const DECLARE_TLV_DB_SCALE(tfa987x_spkg_tlv, 600, 100, 0);
++
++static const struct snd_kcontrol_new tfa987x_controls[] = {
++	SOC_SINGLE_TLV("Speaker Driver Playback Volume", TFA987X_TDM_CFG8,
++		       6, 15, 0, tfa987x_spkg_tlv),
++};
++
+ static const struct snd_soc_component_driver tfa987x_component = {
+ 	.dapm_widgets		= tfa987x_dapm_widgets,
+ 	.num_dapm_widgets	= ARRAY_SIZE(tfa987x_dapm_widgets),
+ 	.dapm_routes		= tfa987x_dapm_routes,
+ 	.num_dapm_routes	= ARRAY_SIZE(tfa987x_dapm_routes),
++	.controls		= tfa987x_controls,
++	.num_controls		= ARRAY_SIZE(tfa987x_controls),
+ 	.idle_bias_on		= 1,
+ 	.use_pmdown_time	= 1,
+ 	.endianness		= 1,

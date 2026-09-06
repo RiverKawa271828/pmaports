@@ -1,0 +1,36 @@
+maintainer="Ankit Pipalia <ankit@example.com>"
+pkgname=firmware-xiaomi-phoenix
+pkgver=1
+pkgrel=14
+pkgdesc="Firmware for Xiaomi POCO X2 / Redmi K30 4G (phoenix)"
+url="https://github.com/Vanilla-s-Android-Stuff/firmware-xiaomi-phoenix"
+arch="aarch64"
+license="proprietary"
+options="!check !strip !archcheck !tracedeps pmb:cross-native"
+
+source="
+	firmware-xiaomi-phoenix.tar.gz
+	30-initramfs-firmware-xiaomi-phoenix.files
+	board-2-phoenix.bin
+"
+
+package() {
+	mkdir -p "$pkgdir"
+	cp -a "$srcdir"/lib "$pkgdir"/
+	cp -a "$srcdir"/usr "$pkgdir"/
+
+	install -Dm644 "$srcdir"/30-initramfs-firmware-xiaomi-phoenix.files \
+		-t "$pkgdir"/usr/share/mkinitfs/files/
+
+	# ath10k board data with chip-id=30214 entry (WCN3998 on phoenix
+	# identifies as WCN3990). Without this ath10k fails to fetch board
+	# data and wlan0 never appears.
+	install -Dm644 "$srcdir"/board-2-phoenix.bin \
+		"$pkgdir"/lib/firmware/ath10k/WCN3990/hw1.0/board-2.bin
+}
+
+sha512sums="
+53cae5013152d11e5e016964a5ed08c7a6bb93345b96772033d1ac6074c7005e0c78d5bdd9c1dd5b54848ac7442719bce05cf497689c5b482fef92eb9bb1d420  firmware-xiaomi-phoenix.tar.gz
+f748bd396b3568e2285ca31bcb4d8964e75e3f24f89f6c38a5c45a73fb56798886bd0ede9b6686a80e52525ccde9d5894f91e8607cc0798bc56bae7a3b0e300e  30-initramfs-firmware-xiaomi-phoenix.files
+0234e09b9934e9e94a62613c0a385d0e69e04aa9e2a77526f4a1c6dbf09c9af42582611a22c3f7a71ea1f4c9711120f30a08e83db92f6ccd81fd19e606cf4dba  board-2-phoenix.bin
+"

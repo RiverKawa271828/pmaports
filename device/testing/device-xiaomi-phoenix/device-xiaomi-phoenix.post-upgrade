@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+# Re-apply on upgrades in case dependency symlinks were recreated.
+rm -f /etc/systemd/system/ModemManager.service.requires/msm-modem-uim-selection.service
+
+mkdir -p /etc/systemd/system
+ln -sf /dev/null /etc/systemd/system/msm-modem-uim-selection.service
+
+if command -v systemctl >/dev/null 2>&1; then
+	systemctl daemon-reload >/dev/null 2>&1 || true
+	systemctl reenable phoenix-wlan-mac.service >/dev/null 2>&1 || true
+	# RTC is read-only; keep NTP enabled so the clock survives reboots.
+	systemctl reenable systemd-timesyncd.service >/dev/null 2>&1 || true
+	# Reboot once to converge out of the probabilistic DSP degraded state.
+	systemctl enable phoenix-dsp-recovery.service >/dev/null 2>&1 || true
+	# Cap input current on misclassified SDP ports (battery drain fix).
+	systemctl reenable phoenix-sdp-cap.timer >/dev/null 2>&1 || true
+fi
+
+if command -v dconf >/dev/null 2>&1; then
+	dconf update >/dev/null 2>&1 || true
+fi

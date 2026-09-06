@@ -1,0 +1,37 @@
+phoenix: qcom_smbx read the AICL-settled ICL status register on SMB5
+
+On PM8150B (SMB5) the DCDC peripheral exposes the input current limit
+in two adjacent registers: base+0x07 holds the configured/instantaneous
+value (which reads 0 until the charger actively passes current), while
+base+0x08 holds the AICL-settled value that userspace expects from
+POWER_SUPPLY_PROP_CURRENT_MAX. qcom_smbx reads +0x07 on both
+generations, so on phoenix CURRENT_MAX reports 0 whenever charging is
+temporarily inhibited even though a 12V USB-PD contract is active.
+
+Select the register offset per generation inside ICL_STATUS(): SMB5
+reads base+0x08, SMB2 keeps base+0x07.
+
+Register layout verified against the Xiaomi downstream smb5-reg.h as
+documented in postmarketOS soc/qualcomm-sm8150/linux MR 18.
+
+Signed-off-by: phoenix port <fix@me>
+
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index 1d1d041..9fc7531 100644
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -141,7 +141,13 @@ enum smb_generation {
+ #define USBIN_CONT_AICL_THRESHOLD_CFG			0x384
+ #define USBIN_CONT_AICL_THRESHOLD_CFG_MASK		GENMASK(5, 0)
+ 
+-#define ICL_STATUS(smb)					(SMB_REG_OFFSET(smb) + 0x07)
++/* On SMB5 (PM8150B) the AICL-settled input current limit lives at +0x08;
++ * +0x07 holds the configured/instantaneous value which can read 0.
++ * SMB2 exposes a single ICL status register at +0x07. */
++#define SMB2_ICL_STATUS_REG				0x07
++#define SMB5_ICL_STATUS_REG				0x08
++#define ICL_STATUS(smb)					(SMB_REG_OFFSET(smb) + \
++			((smb)->gen == SMB5 ? SMB5_ICL_STATUS_REG : SMB2_ICL_STATUS_REG))
+ #define INPUT_CURRENT_LIMIT_MASK			GENMASK(7, 0)
+ 
+ #define POWER_PATH_STATUS(smb)				(SMB_REG_OFFSET(smb) + 0x0B)

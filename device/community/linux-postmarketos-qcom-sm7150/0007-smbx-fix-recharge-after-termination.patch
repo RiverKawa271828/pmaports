@@ -1,0 +1,78 @@
+phoenix: qcom_smbx fix recharge after termination + overvoltage status read
+
+Two fixes for the SMB5 charger path used by PM6150 on phoenix:
+
+- smbx_ov_status() tested the register *address* (reg) instead of the
+  value read from it (val), so battery-overvoltage detection could
+  never trigger. Test val instead.
+
+- After a charge termination (TERMINATE_CHARGE/INHIBIT_CHARGE) the
+  hardware only restarts charging once the recharge threshold is
+  crossed again. On phoenix the QG fuel gauge SOC is unreliable (no
+  calibrated battery profile), so a freshly plugged charger can be
+  left with an input current limit of 0 and no charging while the
+  phone drains and reports "Full". When APSD completes while the
+  charger is in such a state, bounce the charging enable bit (and
+  make sure USBIN is not suspended) to force a fresh charge cycle.
+
+Signed-off-by: phoenix port <fix@me>
+
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index 1d1d041..8a3d751 100644
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -372,7 +372,7 @@ static int smbx_ov_status(struct smb_chip *chip)
+ 	if (rc)
+ 		return rc;
+ 
+-	return !!(reg & mask);
++	return !!(val & mask);
+ }
+ 
+ static int smb_get_prop_status(struct smb_chip *chip, int *val)
+@@ -508,6 +508,7 @@ static int smb_set_current_limit(struct smb_chip *chip, unsigned int val)
+ static void smb_status_change_work(struct work_struct *work)
+ {
+ 	unsigned int charger_type, current_ua;
++	unsigned int stat;
+ 	int usb_online = 0;
+ 	int count, rc;
+ 	struct smb_chip *chip;
+@@ -554,6 +555,35 @@ static void smb_status_change_work(struct work_struct *work)
+ 	}
+ 
+ 	smb_set_current_limit(chip, current_ua);
++
++	/*
++	 * If the charger is in terminate/inhibit state from an earlier
++	 * charge cycle, the hardware only restarts charging once the
++	 * recharge threshold is crossed again. Devices whose fuel gauge
++	 * data is uncalibrated may never report a stable SOC, leaving the
++	 * input current limit at 0 and the battery draining while the
++	 * charger reports "Full". Kick a fresh charge cycle whenever we
++	 * (re)detect a charger in such a state.
++	 */
++	rc = regmap_read(chip->regmap,
++			 chip->base + BATTERY_CHARGER_STATUS_1, &stat);
++	if (rc >= 0) {
++		stat &= BATTERY_CHARGER_STATUS_MASK;
++		if (stat == TERMINATE_CHARGE || stat == INHIBIT_CHARGE) {
++			dev_dbg(chip->dev,
++				"charge terminated, forcing recharge\n");
++			regmap_update_bits(chip->regmap,
++					   chip->base + USBIN_CMD_IL,
++					   USBIN_SUSPEND_BIT, 0);
++			regmap_write(chip->regmap,
++				     chip->base + CHARGING_ENABLE_CMD, 0);
++			usleep_range(1000, 2000);
++			regmap_write(chip->regmap,
++				     chip->base + CHARGING_ENABLE_CMD,
++				     CHARGING_ENABLE_CMD_BIT);
++		}
++	}
++
+ 	power_supply_changed(chip->chg_psy);
+ }
+ 
+-- 
+phoenix port

@@ -1,0 +1,27 @@
+[Unit]
+Description=Restrict cpuidle to WFI so s2idle is wakeable (phoenix SM7150)
+# Mainline SM7150 has no MPM/AOSS wake-irq mapping: when s2idle lets the
+# last running CPU enter rail-power-collapse (cpuidle state2), the GIC
+# loses context and only PDC-routed lines (USB PHY) can wake the SoC.
+# Observed symptoms with deep idle enabled:
+#  - power key cannot resume a suspended system (only force reset works)
+#  - suspend aborts on its own after ~1s (spurious deep-idle wake)
+# With states 1+2 disabled the CPUs stay in WFI during s2idle: the GIC
+# stays alive, every armed wake IRQ works, and pwrkey reliably resumes.
+# Verified 2026-08-25: 18min+ clean suspend, pwrkey wake OK.
+DefaultDependencies=no
+After=sysinit.target
+Before=basic.target
+ConditionPathExists=/sys/devices/system/cpu/cpu0/cpuidle/state2
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'for c in /sys/devices/system/cpu/cpu*/cpuidle/state[12]/disable; do echo 1 > "$c"; done'
+# The BT uart (88c000.serial) arms a gpio wake irq that fires spuriously
+# ~1-15s into every suspend, and the volume-down key (resin) can bounce;
+# both abort s2idle with nothing user-visible. Power key (pwrkey) stays armed.
+ExecStart=/bin/sh -c 'echo disabled > /sys/devices/platform/soc@0/8c0000.geniqup/88c000.serial/power/wakeup; echo disabled > /sys/bus/platform/devices/c440000.spmi:pmic@0:pon@800:resin/power/wakeup || true'
+
+[Install]
+WantedBy=sysinit.target

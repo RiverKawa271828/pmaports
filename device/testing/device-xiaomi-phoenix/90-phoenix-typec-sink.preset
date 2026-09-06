@@ -1,0 +1,3 @@
+# Stuck-as-source auto-recovery affects everyday use (PC -> wall charger
+# transitions), enable the timer by default.
+enable phoenix-typec-sink.timer

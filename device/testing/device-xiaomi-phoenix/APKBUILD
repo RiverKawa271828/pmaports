@@ -1,0 +1,335 @@
+# Reference: <https://postmarketos.org/devicepkg>
+maintainer="Ankit Pipalia <ankit@example.com>"
+pkgname=device-xiaomi-phoenix
+pkgdesc="Xiaomi POCO X2 / Redmi K30 4G"
+pkgver=1
+pkgrel=28
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck"
+depends="
+	alsa-ucm-conf-qcom-sm7150
+	doas
+	firmware-qcom-sm7150
+	firmware-xiaomi-phoenix
+	hexagonrpcd
+	linux-postmarketos-qcom-sm7150
+	make-dynpart-mappings
+	networkmanager
+	bluez
+	polkit-elogind
+	postmarketos-base
+	soc-qcom
+	soc-qcom-modem
+	soc-qcom-pd-mapper
+	soc-qcom-qbootctl
+	systemd-boot
+	unl0kr-fbforcerefresh
+"
+makedepends="devicepkg-dev"
+install="
+	$pkgname.post-install
+	$pkgname.post-upgrade
+"
+	source="
+	00-phoenix-notification-policy
+	00-phoenix-notification-policy.lock
+	52_phoenix_eth_trust.nft
+	90-phoenix-mac.conf
+	90-phoenix-wlan-mac.preset
+	90-phoenix-typec-sink.preset
+	90-phoenix-timesync.preset
+	adsp-disable-recovery.service
+	phoenix-suspend-wfi.service
+	dconf-profile-user
+	49-phoenix-network.rules
+	49-phoenix-timedate.rules
+	81-libssc-xiaomi-phoenix.rules
+	greetd-config.toml
+	msm-modem-uim-selection.service.d/phoenix-wait.conf
+	no-dnssec.conf
+	phoenix-usb-moded-notify
+	phoenix-typec-sink.sh
+	phoenix-typec-sink.service
+	phoenix-typec-sink.timer
+	phoenix-dsp-recovery.sh
+	phoenix-dsp-recovery.service
+	phoenix-sdp-cap.sh
+	phoenix-sdp-cap.service
+	phoenix-sdp-cap.timer
+	90-phoenix-sdp-cap.preset
+	usb-moded-notify.service.d/phoenix.conf
+	phoenix-wlan-mac.service
+	phoenix-wlan-mac.sh
+	$pkgname.post-install
+	$pkgname.post-upgrade
+	doas-user-nopass.conf
+	deviceinfo
+	hexagonrpcd.confd
+	modules-initfs
+	sudoers-user-nopass.conf
+
+	extra-addon/phoenix-charge-cap.conf
+	extra-addon/phoenix-charge-cap.service
+	extra-addon/phoenix-charge-cap.sh
+	extra-addon/phoenix-charge-cap.timer
+	extra-addon/phoenix-screen-off.service
+	extra-addon/phoenix-typec-recover.conf
+	extra-addon/phoenix-typec-recover.service
+	extra-addon/phoenix-typec-recover.sh
+	extra-addon/phoenix-typec-recover.timer
+	extra-addon/phoenix-usb-host-wake.service
+	extra-addon/phoenix-usb-host-wake.sh
+"
+
+build() {
+	devicepkg_build $startdir $pkgname
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+
+	install -Dm644 "$srcdir"/hexagonrpcd.confd \
+		"$pkgdir"/usr/share/hexagonrpcd/hexagonrpcd-sdsp.conf
+
+	# Use hardware MAC addresses (disable NetworkManager randomized MAC mode).
+	install -Dm644 "$srcdir"/90-phoenix-mac.conf \
+		"$pkgdir"/etc/NetworkManager/conf.d/90-phoenix-mac.conf
+
+	# Trust eth* interface (USB-C hub Ethernet) so hosted services like the
+	# phoenix-device-monitor dashboard are reachable on the LAN by default.
+	install -Dm644 "$srcdir"/52_phoenix_eth_trust.nft \
+		"$pkgdir"/etc/nftables.d/52_phoenix_eth_trust.nft
+
+	# Keep the display off for notification/task-complete events.
+	install -Dm644 "$srcdir"/00-phoenix-notification-policy \
+		"$pkgdir"/etc/dconf/db/local.d/00-phoenix-notification-policy
+	install -Dm644 "$srcdir"/00-phoenix-notification-policy.lock \
+		"$pkgdir"/etc/dconf/db/local.d/locks/00-phoenix-notification-policy
+	install -Dm644 "$srcdir"/dconf-profile-user \
+		"$pkgdir"/etc/dconf/profile/user
+
+	# greetd is started without a packaged config on phosh images; without
+	# /etc/greetd/config.toml the greeter fails and hits start-limit.
+	install -Dm644 "$srcdir"/49-phoenix-network.rules \
+		"$pkgdir"/usr/share/polkit-1/rules.d/49-phoenix-network.rules
+
+	# RTC is read-only on this board; let Settings manage time/NTP without
+	# a polkit dialog (which renders as an apparent freeze on the phone),
+	# and enable timesyncd via preset so the clock is always sane.
+	install -Dm644 "$srcdir"/49-phoenix-timedate.rules \
+		"$pkgdir"/usr/share/polkit-1/rules.d/49-phoenix-timedate.rules
+	install -Dm644 "$srcdir"/90-phoenix-timesync.preset \
+		"$pkgdir"/usr/lib/systemd/system-preset/90-phoenix-timesync.preset
+	install -Dm644 "$srcdir"/81-libssc-xiaomi-phoenix.rules \
+		"$pkgdir"/usr/lib/udev/rules.d/81-libssc-xiaomi-phoenix.rules
+
+	install -Dm644 "$srcdir"/greetd-config.toml \
+		"$pkgdir"/etc/greetd/config.toml
+
+	# uim-selection must run after the modem is up, otherwise it exits
+	# without selecting the SIM session and MM puts the modem in failed.
+	install -Dm644 "$srcdir"/no-dnssec.conf \
+		"$pkgdir"/etc/systemd/resolved.conf.d/no-dnssec.conf
+
+	install -Dm644 "$srcdir"/phoenix-wait.conf \
+		"$pkgdir"/usr/lib/systemd/system/msm-modem-uim-selection.service.d/phoenix-wait.conf
+
+	# Ath10k can fall back to random MAC when calibration data doesn't provide
+	# one. Apply a deterministic, persisted MAC before NetworkManager starts.
+	# Enable via systemd preset only - postmarketos-base runs
+	# `systemctl preset-all` at image build, and post-install/post-upgrade
+	# re-applies via `systemctl reenable`. A package-shipped manual
+	# WantedBy symlink would conflict with that flow and resurrect the
+	# unit after a user `systemctl disable`.
+	install -Dm755 "$srcdir"/phoenix-wlan-mac.sh \
+		"$pkgdir"/usr/libexec/phoenix-wlan-mac.sh
+	install -Dm644 "$srcdir"/phoenix-wlan-mac.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-wlan-mac.service
+	install -Dm644 "$srcdir"/90-phoenix-wlan-mac.preset \
+		"$pkgdir"/usr/lib/systemd/system-preset/90-phoenix-wlan-mac.preset
+
+	# Phoenix's ADSP firmware's sensor_process PD fails SNS_REG_INIT every
+	# ~4s, and the default qcom_q6v5_pas recovery=enabled policy restarts the
+	# whole ADSP on each crash -- ~11 crashes/min, ~20°C of extra package
+	# heat, and battery drain rate that exhausts a full charge in ~1h.
+	# Disable the recovery loop early in boot; audio is broken anyway.
+	install -Dm644 "$srcdir"/adsp-disable-recovery.service \
+		"$pkgdir"/usr/lib/systemd/system/adsp-disable-recovery.service
+
+	# s2idle is only wakeable (pwrkey) and non-self-aborting when the CPUs
+	# never enter rail-power-collapse; see the unit file for the full
+	# root-cause chain. Enabled via the systemd preset below.
+	install -Dm644 "$srcdir"/phoenix-suspend-wfi.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-suspend-wfi.service
+
+	# usb-signaller emits "USB connected" for any typec attach, including
+	# DCP/PD wall chargers with no data lines, which pops the USB mode
+	# selector on every charge. Ship a patched notify daemon (selector only
+	# for SDP/CDP data hosts) and point the user service at it via drop-in.
+	# PD is deliberately excluded from the dialog: PD partners here are
+	# almost always power bricks.
+	install -Dm755 "$srcdir"/phoenix-usb-moded-notify \
+		"$pkgdir"/usr/libexec/phoenix-usb-moded-notify
+	# abuild flattens subdirectory sources into srcdir/, hence basename.
+	install -Dm644 "$srcdir"/phoenix.conf \
+		"$pkgdir"/usr/lib/systemd/user/usb-moded-notify.service.d/phoenix.conf
+
+	# Auto-recover "stuck as source" after PC -> wall charger transitions:
+	# a data-less partner while we source and discharge gets flipped back
+	# to sink. Deliberate hubs enumerate usb_device and are left alone.
+	# Enabled by default via preset; see script header for full rationale.
+	install -Dm755 "$srcdir"/phoenix-typec-sink.sh \
+		"$pkgdir"/usr/libexec/phoenix-typec-sink.sh
+	install -Dm644 "$srcdir"/phoenix-typec-sink.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-typec-sink.service
+	install -Dm644 "$srcdir"/phoenix-typec-sink.timer \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-typec-sink.timer
+	install -Dm644 "$srcdir"/90-phoenix-typec-sink.preset \
+		"$pkgdir"/usr/lib/systemd/system-preset/90-phoenix-typec-sink.preset
+
+	# Reboot once to converge out of the probabilistic DSP degraded boot
+	# state (no sound + no sensors ~20-30% of boots). Persist counter
+	# prevents a reboot loop. See script header for rationale.
+	install -Dm755 "$srcdir"/phoenix-dsp-recovery.sh \
+		"$pkgdir"/usr/libexec/phoenix-dsp-recovery.sh
+	install -Dm644 "$srcdir"/phoenix-dsp-recovery.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-dsp-recovery.service
+
+	# Cap the SMB5 input current at 500mA while the source is an SDP port.
+	# Stopgap for the kernel-side BC1.2 misclassification that leaves a
+	# strict SDP port buckling under the DCP limit, draining the battery
+	# while "plugged in" (2026-09-01). Enabled by default via preset.
+	install -Dm755 "$srcdir"/phoenix-sdp-cap.sh \
+		"$pkgdir"/usr/libexec/phoenix-sdp-cap.sh
+	install -Dm644 "$srcdir"/phoenix-sdp-cap.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-sdp-cap.service
+	install -Dm644 "$srcdir"/phoenix-sdp-cap.timer \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-sdp-cap.timer
+	install -Dm644 "$srcdir"/90-phoenix-sdp-cap.preset \
+		"$pkgdir"/usr/lib/systemd/system-preset/90-phoenix-sdp-cap.preset
+
+	# --- Optional server-mode add-ons (source files live in extra-addon/) ----
+	# These ship installed but DISABLED. Opt in per machine with
+	# `systemctl enable --now <unit>`. See extra-addon/README.md for context.
+
+	# Charge limiter. Pauses charging at 70%, resumes at 60% (hysteresis).
+	# Enable: `systemctl enable --now phoenix-charge-cap.timer`
+	# Tune:   /etc/phoenix-charge-cap.conf
+	install -Dm755 "$srcdir"/phoenix-charge-cap.sh \
+		"$pkgdir"/usr/libexec/phoenix-charge-cap.sh
+	install -Dm644 "$srcdir"/phoenix-charge-cap.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-charge-cap.service
+	install -Dm644 "$srcdir"/phoenix-charge-cap.timer \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-charge-cap.timer
+	install -Dm644 "$srcdir"/phoenix-charge-cap.conf \
+		"$pkgdir"/etc/phoenix-charge-cap.conf
+
+	# Panel blanker for headless / multi-user.target installs.
+	# Enable: `systemctl enable --now phoenix-screen-off.service`
+	install -Dm644 "$srcdir"/phoenix-screen-off.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-screen-off.service
+
+	# Rescue from "stuck as source" typec state after charger removal.
+	# Enable: `systemctl enable --now phoenix-typec-recover.timer`
+	# Tune:   /etc/phoenix-typec-recover.conf
+	install -Dm755 "$srcdir"/phoenix-typec-recover.sh \
+		"$pkgdir"/usr/libexec/phoenix-typec-recover.sh
+	install -Dm644 "$srcdir"/phoenix-typec-recover.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-typec-recover.service
+	install -Dm644 "$srcdir"/phoenix-typec-recover.timer \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-typec-recover.timer
+	install -Dm644 "$srcdir"/phoenix-typec-recover.conf \
+		"$pkgdir"/etc/phoenix-typec-recover.conf
+
+	# Cold-boot USB host wake: forces a usb_role_switch device→host
+	# toggle if eth0 doesn't appear within 45s of multi-user.target.
+	# Self-heals the case where a Type-C hub is attached at power-on,
+	# so qcom-pmic-typec never fires an attach event and xhci-hcd never
+	# probes. Required for unattended recovery after a power outage.
+	# Enable: `systemctl enable phoenix-usb-host-wake.service`
+	install -Dm755 "$srcdir"/phoenix-usb-host-wake.sh \
+		"$pkgdir"/usr/libexec/phoenix-usb-host-wake.sh
+	install -Dm644 "$srcdir"/phoenix-usb-host-wake.service \
+		"$pkgdir"/usr/lib/systemd/system/phoenix-usb-host-wake.service
+	# ------------------------------------------------------------------------
+
+	# Passwordless root access for default postmarketOS user over doas/sudo.
+	# This mirrors the live fix and makes it persistent across fresh flashes.
+	install -Dm600 "$srcdir"/doas-user-nopass.conf \
+		"$pkgdir"/etc/doas.d/99-user-nopass.conf
+	install -Dm440 "$srcdir"/sudoers-user-nopass.conf \
+		"$pkgdir"/etc/sudoers.d/90-user-nopass
+
+	# Enable NetworkManager at boot (required for WiFi/Ethernet in phosh)
+	mkdir -p "$pkgdir"/etc/runlevels/default
+	ln -sf /etc/init.d/networkmanager \
+		"$pkgdir"/etc/runlevels/default/networkmanager
+
+	# Enable Bluetooth at boot
+	ln -sf /etc/init.d/bluetooth \
+		"$pkgdir"/etc/runlevels/default/bluetooth
+
+	# Enable elogind at boot (required for phosh reboot/shutdown)
+	ln -sf /etc/init.d/elogind \
+		"$pkgdir"/etc/runlevels/default/elogind
+}
+
+subpackages="$pkgname-nonfree-firmware:nonfree_firmware"
+
+nonfree_firmware() {
+	pkgdesc="Firmware for GPU, WiFi, modem, DSP (required for most functionality)"
+	depends="firmware-xiaomi-phoenix"
+	mkdir "$subpkgdir"
+}
+
+sha512sums="
+abdce4edc62396ce7feb869e8a51be31895b176d8a680532d0e8e481b63116c4316b6452c122e70f89115014fa84178603b15f97e336839a49653e441dde7f7a  00-phoenix-notification-policy
+4ec412372522e996ae83d61e3bce130a44c0c26f33ee6456178f82b2e2ee2bd9fa699ae51ab0be9970403f558b8ab9b378a2a81978a7bca7014df12fb3dcf662  00-phoenix-notification-policy.lock
+d015b7e28df2213692f18a7ad358310a4df5b5db23356ad864cd07c9990b8080c9883821029a8a9d0c9024add6d29b99b638081edc63d7e8aa74a3b6c107a61e  52_phoenix_eth_trust.nft
+1699fb946b5cd237056fc9be47c3d1917c8fe8dfdf7884d665dea8e24cf45983fe9c781480617a3c8411b83d702c7eb849fb69bdfe2b3eec04a21ef04d3ce47a  90-phoenix-mac.conf
+9b81d09b6bc0cef878fa391fc243a01751d5d6fdec4c2402cd9e56d41e0a7b4b9cc99a64e5378fb0c042f20704d479218d902726b4e55ee5ea0634019c6e7aa8  90-phoenix-wlan-mac.preset
+6d027fad122104b55fc6fe63b2cb997d9aaaf9b3e6f63aa421b4e0e5d918b5094097474678d79d88384d3b409b5e28109653b54b71b7b2c601f649852183eba0  90-phoenix-typec-sink.preset
+ef368c73969a00b5c4458de5009cb28ef7aec7a7040bb58f8b0bc0a148d66f16a3a4dbd0fb4e8b369a4a1b19737ea56712bd8a85e06c8c4559a42be2523ad1b5  90-phoenix-timesync.preset
+fe6395a33444a31fe4dae0200d3c94d3e9ab62dae3069130bfaa9f8ed5f333309a6346df91184ced29d482d0579313dd16df8a91030c7f6e0374e4025e715af0  adsp-disable-recovery.service
+acd6efd61c21d2d42472aff03e9ed281748d0cd56b707fa02cfeac96522c825eb59fbc425ba42d5a796845fada5412cb28a04b5516be64e5b62917e6577aba4e  phoenix-suspend-wfi.service
+24aa78ee30672628df4cf8acb48dac3411a8baa4ab0e32d5dc308adecbd82bbe3012e024b4b20c9f6f569817f588f33040d5969ad7a09e3ab69991d0262199df  dconf-profile-user
+7cb30f39579c9eda4918484470a386781df72b93fc54ac3c269eff926ae00ad448a38d672825500f6a60ec57af29fd4860060936adee7a1e0ae0a2f4f46bb8b9  49-phoenix-network.rules
+bf6d0e6eee097d5e80eda5c70197443f1a23d961f66a3997efd1a65d5acee48468784d25f32b600da37e552b48812d57039e46c5605c3488d2d01c035c084fc7  49-phoenix-timedate.rules
+2c16ba75e0077b2b1eaefa4c73b287475505a1aeb291ec29316d41cc094277320f9d2aaabfd91eb1dc0f488ab2d61a94faef16e7afe0f1e226779113761b9a37  81-libssc-xiaomi-phoenix.rules
+bb800eb84ddfd1fd5c643d3483710c3183873e4e1203c320dc3e82844e35244af00aa0ffa51af6a8bfd93c1ed2185fffa02d666377505c1f34962366cee05471  greetd-config.toml
+edc2c02c42ecbb8a01e99c62206af8a854ccc530bf74cab50d14895b1071631240a9d1611e8b4839a486ba96b61df6e9010a2536acfaaaa0a36f047c329f1e93  phoenix-wait.conf
+d05e663b91e799f2f270b457b0c8a263a9ff0e70ab64a5a517553d96ea7f5d350aac1321ab1c5bb83fb71636b0c0cf078b544563768c9075dbc09e78d9e47099  no-dnssec.conf
+435e0619c996bf6789b41a62e367c51c79efe30afe2e2717e4bddcbb0ad46526ca80263f306a10a7dbbea49f5144bee2451b469219827cc04ec2b6cad4805afe  phoenix-usb-moded-notify
+09f3d196a2a13f2e5cbaf17ae7cd65a5ea7777c6c675124206c9bd0255508c397667d7cce48671a2910e8856bf2574851ba1baf7f1e68a6eba570675cd5e26e1  phoenix-typec-sink.sh
+168248bb169c7e3ac24b37d9d7a72dfeed3e38fcbb987a60c24aa004d022812149e98cf0a4bc91f6b06cabb84e3602e6e5e6e9d12a89f0a7294d09ef502f0159  phoenix-typec-sink.service
+15b31d61155b76b378a74360f693021969ec0872ff022757e87471faebd11e1a57bc7af57d7b50794fefbacf674a0da75c3d90280cf5cad4ef5b51f1eff757ed  phoenix-typec-sink.timer
+d01eb2cfb683c93f8802fb7bbc19651f25dd5be2161960d267a73578c792e125e8cb13b06bec91e488df0294d33b618cbab6e20c01e53498d1799602a85917fb  phoenix-dsp-recovery.sh
+75b9e63e5d6be8e0c61fd4303b6ef5d959d8bff9cceeac03038c4dc9c3271a36aaf5ead126dde9734184b0c1e49eb3432902ac8c10a6dbc29bee35115f6bb19b  phoenix-dsp-recovery.service
+e745c9f1e74e37d4f1b377865341e7ca275790483458476b679e709351d7fd0dd846f038e89d225ce487a8a4d6eebe5cb0b4ba2efdc11d46b3960bc89d39e4a1  phoenix-sdp-cap.sh
+1dd57ea7e785eb9bf0bebed8e11b67a75c5449be729754e0327129293513b978f40cb0aa403a208c05a605d07b9171f6e4516989551ca6f78bbd98382b7ee46a  phoenix-sdp-cap.service
+e8409f6ead544a88024e492ac87105a9a8b5046038734694d2576238735c3be73a117f32da1d07719116281d0e5c250331800dac6a9820f1e38538db040857f5  phoenix-sdp-cap.timer
+9279fb06d62e20089013af07905bb44d96068597b505b45eb4f05e8bc904350c46a6608dc39b1e21c3828caafd0f50f019e133bee79061d46b7b7aa2e498928e  90-phoenix-sdp-cap.preset
+6f16715eb9d0613bae7bbe72eaeefcdfdd8c6ce4e7f0dbee72389799c6add14649be3408d23c8328d2984c3821daad7f109a51a4970861ef57eb38f7436c7346  phoenix.conf
+50c78d077a2540ba697c4bfffb23e9d4fc604f71b26507341db19afa99409719b2360a7879bbbb03239245bed4c2182ccd42930c812be0fc6f8c79d8364baf1e  phoenix-wlan-mac.service
+d56f811aa49b89246006356f63e4f2e3de3d9f9b397a20bcc36dee0c0621b191c5ffc58b80c8bea80055dd625c8541d772efb0581ca47eb319e2965ddc35492c  phoenix-wlan-mac.sh
+534cd7922787427fce1bc13517be4b2b79894fb15cc08874c11cbada06e48a76db488c0d0d793b37d85ffe6a8fb812da0a1350c8a0aa2787c61fb4b5ba5430c9  device-xiaomi-phoenix.post-install
+b33dc633ac27f6f6c2d835c509662021b3825a4ea3c11459cffe5ac1601a8affbce1ba5bac6746b7a95db6d7f76cb1144e38cde8563cf77da9dfb32be643ab5e  device-xiaomi-phoenix.post-upgrade
+15a5fc589e54cf313998518042dc32a976b7b6c690aa82639a7ddc500d45659b6df39b6e117b338481a8e7aa2e6d706c90428c90073ba727d00ad6e0e0fcd501  doas-user-nopass.conf
+038da30192c12a9d0aad77c64ce7662b5596efe336296cec5083a23f35257f767d91d41267eab33f415342da049c18dc7200625a2a8f3577020cdb06bd2f7037  deviceinfo
+0b94aae89479b0d684b1a0e6c498763afa623f11a89ebe96bda2db1ead36c71a3a93a25131eca8bbc51341fe3ff261c7101960e814d9c05cd553287387e6dee0  hexagonrpcd.confd
+f0304347e4b8018b1d3731df4daa2da91b2e3b76ca39e107b3ed2efaaccfa924445868aaf026de14c6808cc56959a486c2062ca2efa5b6f5f2ccbdc9c4919113  modules-initfs
+bd753c03b65b432b03d55b28f96fe501e94f3ee22a1e79987473dee98fd5a2aa617475beacf5a15240367e40ecd66c7ff88564a674eca55e1a9e91684feeaa4c  sudoers-user-nopass.conf
+05507cbed39c233ca7b78883ac2fc54a37fdefb00bbd7269fb482351b4e18790d2a36287d2692941c45d4e287bf33f601ce756ff27b1a7bbe0ec65f07a71d824  phoenix-charge-cap.conf
+8269c86cdd975cfb3338b2ce924fbe8a5844f50047610e534c9e0c875dec7ab3213baa9b80eaa30d96dc23f98e240eaacc5eebf0e2f183efaae61d45290e6a32  phoenix-charge-cap.service
+5ece715fdab6311ce83c8a93065a921f03d0396d08a234f623ead713b59b03e169afdc5c15d861c71ae5494c4010751f416eab989255b5822a7e2f27277ed39c  phoenix-charge-cap.sh
+e93559017634e7efd34987827636789466920a9bb78635de699dfedf3d635f1a0ac90ea7aef6b1faa36fd39aa2a5d90a19add355da33168da75ed1c2621fcd24  phoenix-charge-cap.timer
+71126ec16323ef86217561bb992ea0ae17e54327aa68c043f5c7dd6158640b234ad4d7a2dfdf45ff83968128587f0c7158e46b4438e22cfed46bf9271fd3969b  phoenix-screen-off.service
+620ea416f372ed224e41407e667db33a2e693b63f5f258d15be8b660069ce010ff6121643d44f8ec7f37a0d531f2ae48ab1d72093dd5d798e401442d3b8f10ec  phoenix-typec-recover.conf
+7b1f1e9c2470888f83d7b668a8e405efc9d91bdc0ecd6da80fef1a754856f23054bcfee4f81f600860e9ef546ecbc0fffd49f3dd23c3c95db0a9e3d04ade7d95  phoenix-typec-recover.service
+3e25bd9b8ec9e167d68211c96bf34d5d2fea1ba29eeb1730cd74d81250b659bcccde5d84bb6e0a21048cc9027ef5cc0d142886f32da1233bbd67703574e93b43  phoenix-typec-recover.sh
+782b0862643f2dae4a69eaf15b6577809702184795b47e4aaa48b140d2e01978231b6a7c4509ed986877378e1d58810ab7ec7e98e9a6de37bdecd3cbaf24daa4  phoenix-typec-recover.timer
+c6de9c9994be065fab7bf8bc080c37a5accbc69fa976ea73b1f7ffcdb9601696c910ec45e32fc0c869096f3a1521c60d80e4b48903c7006e26d6ed34ab5a7816  phoenix-usb-host-wake.service
+4a20f3ff065de2746d4505ef7695f8265c031d8719fc26454b5f5ac4047663f6f66f7f02d7b41d9fe95caa845b6084200a1de5a296edcb4e6f5ffe26260f9912  phoenix-usb-host-wake.sh
+"

@@ -1,0 +1,7 @@
+[Unit]
+Description=Phoenix SDP input current cap (500mA on strict PC ports)
+ConditionPathExists=/sys/class/power_supply/pm8150b-charger/current_max
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/phoenix-sdp-cap.sh

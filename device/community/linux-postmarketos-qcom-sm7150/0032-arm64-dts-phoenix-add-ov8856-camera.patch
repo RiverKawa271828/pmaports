@@ -1,0 +1,143 @@
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+@@ -435,3 +435,139 @@
+ 		qcom,sd-lines = <0>;
+ 	};
+ };
++
++/*
++ * Rear ultrawide camera (OV8856 8MP, I2C 0x36) on csiphy2 / CCI1, wired per
++ * the stock phoenix dtbo (qcom,cam-sensor@5) and the stock camx sensormodule
++ * blob (laneAssign 0x10 = 2 data lanes, CUSTOM1 low, MCLK 19.2 MHz):
++ * MCLK2 = gpio15, CAMU_RESET = gpio25.  Camera rails are GPIO-gated fixed
++ * rails: vddio = TLMM gpio4, vdda = PM6150L GPIO3 (fed from vreg_bob),
++ * vddd = TLMM gpio29 (fed from vreg_s8c_1p35).  Note the analog rail lives
++ * on a PMIC GPIO - TLMM gpio0-3 stay reserved for NFC/FP and must not be
++ * referenced.
++ */
++/ {
++	cam_vddio_1v8: regulator-cam-vddio {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vddio";
++		regulator-min-microvolt = <1800000>;
++		regulator-max-microvolt = <1800000>;
++		enable-active-high;
++		gpio = <&tlmm 4 GPIO_ACTIVE_HIGH>;
++		startup-delay-us = <100>;
++	};
++
++	/*
++	 * camera_vdda_m_fa (PM6150L GPIO4, stock cam_vdda_m_fa_regulator /
++	 * cam_v_custom1) feeds the shared MIPI data-path switch and the
++	 * macro/front-aux sensors; the stock OV8856 power-up sequence raises
++	 * it together with the ultrawide rails, so it is modelled as the
++	 * parent supply of camera_vdda to keep them switched together.
++	 */
++	cam_vdda_m_fa_2v8: regulator-cam-vdda-m-fa {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdda_m_fa";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		enable-active-high;
++		gpio = <&pm6150l_gpios 4 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_bob>;
++		startup-delay-us = <100>;
++	};
++
++	cam_vdda_2v8: regulator-cam-vdda {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdda";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		enable-active-high;
++		gpio = <&pm6150l_gpios 3 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&cam_vdda_m_fa_2v8>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_vdda_switch>;
++		startup-delay-us = <100>;
++	};
++
++	cam_vddd_1v2: regulator-cam-vddd {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vddd";
++		regulator-min-microvolt = <1200000>;
++		regulator-max-microvolt = <1200000>;
++		enable-active-high;
++		gpio = <&tlmm 29 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_s8c_1p35>;
++		startup-delay-us = <100>;
++	};
++};
++
++&pm6150l_gpios {
++	cam_vdda_switch: cam-vdda-switch-state {
++		pins = "gpio3";
++		function = PMIC_GPIO_FUNC_NORMAL;
++		power-source = <0>;
++		output-low;
++	};
++};
++
++&camss {
++	ports {
++		port@2 {
++			csiphy2_ep: endpoint {
++				data-lanes = <0 1>;
++				remote-endpoint = <&ov8856_ep>;
++			};
++		};
++	};
++};
++
++&cci1_i2c0 {
++	camera@36 {
++		compatible = "ovti,ov8856";
++		reg = <0x36>;
++
++		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_mclk2_default &cam_u_mipi_switch>;
++
++		clocks = <&camcc CAMCC_MCLK2_CLK>;
++		clock-names = "xvclk";
++		assigned-clocks = <&camcc CAMCC_MCLK2_CLK>;
++		assigned-clock-rates = <19200000>;
++
++		dovdd-supply = <&cam_vddio_1v8>;
++		avdd-supply = <&cam_vdda_2v8>;
++		dvdd-supply = <&cam_vddd_1v2>;
++
++		port {
++			ov8856_ep: endpoint {
++				link-frequencies = /bits/ 64 <720000000 360000000>;
++				data-lanes = <1 2>;
++				remote-endpoint = <&csiphy2_ep>;
++			};
++		};
++	};
++};
++
++&tlmm {
++	cam_mclk2_default: cam-mclk2-default-state {
++		pins = "gpio15";
++		function = "cam_mclk";
++		drive-strength = <4>;
++		bias-disable;
++	};
++
++	/*
++	 * csiphy2 data lanes are routed through a MIPI path switch whose
++	 * select line is gpio88 (stock CAMU_CUSTOM1); the ultrawide
++	 * streaming state is sel-low (stock cam_sensor_mipi_switch_sel_low,
++	 * camx power-up CUSTOM1 = 0; the macro sensor uses 1).
++	 */
++	cam_u_mipi_switch: cam-u-mipi-switch-state {
++		pins = "gpio88";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++		output-low;
++	};
++};
+

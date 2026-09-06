@@ -1,0 +1,10 @@
+[Unit]
+Description=Run phoenix-sdp-cap every 10s
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=10s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

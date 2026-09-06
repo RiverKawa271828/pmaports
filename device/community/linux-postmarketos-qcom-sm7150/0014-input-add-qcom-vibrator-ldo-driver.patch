@@ -1,0 +1,325 @@
+From: OpenCode <opencode@localhost>
+Date: Mon, 24 Aug 2026 00:00:00 +0000
+Subject: [PATCH] input: misc: add Qualcomm QPNP vibrator LDO driver
+
+Phoenix (and other PM6150 devices) use a plain LDO-driven ERM motor,
+qcom,qpnp-vibrator-ldo in the downstream kernel. The mainline
+pm8xxx-vibrator pmi632 compat layer writes a similar VSET encoding but
+never polls VREG_READY and its register mapping has not produced motion
+on this device. Port the downstream leds-qpnp-vibrator-ldo.c behaviour
+(set voltage at base+0x40, EN bit7 at base+0x46, poll STATUS1 bit7)
+as a minimal ff-memless input driver, modelled on pm8xxx-vibrator.c.
+
+The input device keeps the historical "pm8xxx_vib_ffmemless" name so
+existing feedbackd udev rules keep matching.
+
+Downstream reference: CAF drivers/leds/leds-qpnp-vibrator-ldo.c
+(https://raw.githubusercontent.com/LineageOS/android_kernel_xiaomi_sm8150/lineage-18.1/drivers/leds/leds-qpnp-vibrator-ldo.c)
+
+Stock DT parameters (pm6150.dtsi): qcom,vib-ldo-volt-uv = <3000000>,
+overdrive disabled - reflected in the phoenix DTS override.
+---
+ drivers/input/misc/Kconfig             |  10 ++
+ drivers/input/misc/Makefile            |   1 +
+ drivers/input/misc/qcom-vibrator-ldo.c | 233 +++++++++++++++++++++++++
+ arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts | 6 +++-
+ 4 files changed, 249 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/misc/qcom-vibrator-ldo.c b/drivers/input/misc/qcom-vibrator-ldo.c
+new file mode 100644
+index 000000000000..010203040506
+--- /dev/null
++++ b/drivers/input/misc/qcom-vibrator-ldo.c
+@@ -0,0 +1,238 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Qualcomm QPNP vibrator LDO driver based on ff-memless framework.
++ *
++ * Minimal port of the downstream leds-qpnp-vibrator-ldo.c behaviour:
++ * write LDO setpoint (2 bytes, mV, 8 mV steps) at base+0x40, toggle the
++ * enable bit at base+0x46 and poll VREG_READY (base+0x08 bit7).
++ * Modelled on pm8xxx-vibrator.c; keeps the historical input device name
++ * so existing feedbackd udev rules match.
++ */
++
++#include <linux/errno.h>
++#include <linux/input.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/regmap.h>
++#include <linux/slab.h>
++
++/* Vibrator-LDO register offsets from the peripheral base */
++#define QPNP_VIB_LDO_REG_STATUS1	0x08
++#define QPNP_VIB_LDO_VREG_READY		BIT(7)
++#define QPNP_VIB_LDO_REG_VSET_LB	0x40
++#define QPNP_VIB_LDO_REG_EN_CTL		0x46
++#define QPNP_VIB_LDO_EN			BIT(7)
++
++/* Vibrator-LDO voltage settings */
++#define QPNP_VIB_LDO_VMIN_UV		1504000
++#define QPNP_VIB_LDO_VMAX_UV		3544000
++#define QPNP_VIB_LDO_VOLT_STEP_UV	8000
++#define QPNP_VIB_LDO_DEFAULT_UV		3000000
++
++#define MAX_FF_SPEED		0xff
++
++struct qpnp_vib {
++	struct input_dev *input;
++	struct work_struct work;
++	struct regmap *regmap;
++	unsigned int vset_addr;
++	unsigned int enable_addr;
++	unsigned int status_addr;
++	unsigned int vmax_uv;
++	unsigned int level_uv;
++	int speed;
++	bool active;
++};
++
++static int qpnp_vib_ldo_poll_ready(struct qpnp_vib *vib)
++{
++	unsigned int val = 0;
++	int error;
++
++	error = regmap_read_poll_timeout(vib->regmap, vib->status_addr, val,
++					 val & QPNP_VIB_LDO_VREG_READY,
++					 100, 10000);
++	if (error) {
++		dev_err(&vib->input->dev,
++			"VREG_READY poll timed out (status=0x%02x): %d\n",
++			val, error);
++		regmap_update_bits(vib->regmap, vib->enable_addr,
++				   QPNP_VIB_LDO_EN, 0);
++	}
++
++	return error;
++}
++
++static void qpnp_vib_work_handler(struct work_struct *work)
++{
++	struct qpnp_vib *vib = container_of(work, struct qpnp_vib, work);
++	bool on = vib->speed != 0;
++	u16 vset_mv;
++	u8 buf[2];
++	int error;
++
++	if (on) {
++		vib->active = true;
++		vib->level_uv = QPNP_VIB_LDO_VMIN_UV +
++			mult_frac(QPNP_VIB_LDO_VMAX_UV - QPNP_VIB_LDO_VMIN_UV,
++				  vib->speed, MAX_FF_SPEED);
++		vib->level_uv = min(vib->level_uv, vib->vmax_uv);
++
++		vset_mv = roundup(vib->level_uv, QPNP_VIB_LDO_VOLT_STEP_UV) / 1000;
++		buf[0] = vset_mv & 0xff;
++		buf[1] = (vset_mv >> 8) & 0xff;
++
++		error = regmap_bulk_write(vib->regmap, vib->vset_addr, buf, 2);
++		if (error) {
++			dev_err(&vib->input->dev,
++				"failed to write VSET (0x%04x): %d\n",
++				vib->vset_addr, error);
++			return;
++		}
++
++		error = regmap_update_bits(vib->regmap, vib->enable_addr,
++					   QPNP_VIB_LDO_EN, QPNP_VIB_LDO_EN);
++		if (error) {
++			dev_err(&vib->input->dev,
++				"failed to enable (0x%04x): %d\n",
++				vib->enable_addr, error);
++			return;
++		}
++
++		qpnp_vib_ldo_poll_ready(vib);
++	} else {
++		vib->active = false;
++		error = regmap_update_bits(vib->regmap, vib->enable_addr,
++					   QPNP_VIB_LDO_EN, 0);
++		if (error)
++			dev_err(&vib->input->dev,
++				"failed to disable (0x%04x): %d\n",
++				vib->enable_addr, error);
++	}
++}
++
++static void qpnp_vib_close(struct input_dev *dev)
++{
++	struct qpnp_vib *vib = input_get_drvdata(dev);
++
++	cancel_work_sync(&vib->work);
++	if (vib->active) {
++		vib->speed = 0;
++		qpnp_vib_work_handler(&vib->work);
++	}
++}
++
++static int qpnp_vib_play_effect(struct input_dev *dev, void *data,
++				struct ff_effect *effect)
++{
++	struct qpnp_vib *vib = input_get_drvdata(dev);
++
++	vib->speed = effect->u.rumble.strong_magnitude >> 8;
++	if (!vib->speed)
++		vib->speed = effect->u.rumble.weak_magnitude >> 9;
++
++	schedule_work(&vib->work);
++
++	return 0;
++}
++
++static int qpnp_vib_probe(struct platform_device *pdev)
++{
++	struct qpnp_vib *vib;
++	struct input_dev *input_dev;
++	unsigned int val, reg_base = 0;
++	int error;
++
++	vib = devm_kzalloc(&pdev->dev, sizeof(*vib), GFP_KERNEL);
++	if (!vib)
++		return -ENOMEM;
++
++	vib->regmap = dev_get_regmap(pdev->dev.parent, NULL);
++	if (!vib->regmap)
++		return dev_err_probe(&pdev->dev, -ENODEV,
++				     "couldn't get parent regmap\n");
++
++	input_dev = devm_input_allocate_device(&pdev->dev);
++	if (!input_dev)
++		return -ENOMEM;
++
++	INIT_WORK(&vib->work, qpnp_vib_work_handler);
++	vib->input = input_dev;
++
++	error = fwnode_property_read_u32(pdev->dev.fwnode, "reg", &reg_base);
++	if (error < 0)
++		return dev_err_probe(&pdev->dev, error,
++				     "failed to read reg address\n");
++
++	error = fwnode_property_read_u32(pdev->dev.fwnode,
++					 "qcom,vib-ldo-volt-uv", &val);
++	if (error < 0)
++		val = QPNP_VIB_LDO_DEFAULT_UV;
++	vib->vmax_uv = clamp_val(val, QPNP_VIB_LDO_VMIN_UV,
++				 QPNP_VIB_LDO_VMAX_UV);
++
++	vib->vset_addr = reg_base + QPNP_VIB_LDO_REG_VSET_LB;
++	vib->enable_addr = reg_base + QPNP_VIB_LDO_REG_EN_CTL;
++	vib->status_addr = reg_base + QPNP_VIB_LDO_REG_STATUS1;
++
++	dev_info(&pdev->dev,
++		 "QPNP vibrator LDO: base=0x%04x vset=0x%04x en=0x%04x status=0x%04x vmax=%u uV\n",
++		 reg_base, vib->vset_addr, vib->enable_addr,
++		 vib->status_addr, vib->vmax_uv);
++
++	input_dev->name = "pm8xxx_vib_ffmemless";
++	input_dev->id.version = 1;
++	input_dev->close = qpnp_vib_close;
++	input_set_drvdata(input_dev, vib);
++	input_set_capability(input_dev, EV_FF, FF_RUMBLE);
++
++	error = input_ff_create_memless(input_dev, NULL, qpnp_vib_play_effect);
++	if (error)
++		return dev_err_probe(&pdev->dev, error,
++				     "couldn't register vibrator as FF device\n");
++
++	error = input_register_device(input_dev);
++	if (error)
++		return dev_err_probe(&pdev->dev, error,
++				     "couldn't register input device\n");
++
++	platform_set_drvdata(pdev, vib);
++	return 0;
++}
++
++static int qpnp_vib_suspend(struct device *dev)
++{
++	struct platform_device *pdev = to_platform_device(dev);
++	struct qpnp_vib *vib = platform_get_drvdata(pdev);
++
++	cancel_work_sync(&vib->work);
++	vib->speed = 0;
++	qpnp_vib_work_handler(&vib->work);
++
++	return 0;
++}
++
++static DEFINE_SIMPLE_DEV_PM_OPS(qpnp_vib_pm_ops, qpnp_vib_suspend, NULL);
++
++static const struct of_device_id qpnp_vib_id_table[] = {
++	{ .compatible = "qcom,qpnp-vibrator-ldo" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, qpnp_vib_id_table);
++
++static struct platform_driver qpnp_vib_driver = {
++	.probe		= qpnp_vib_probe,
++	.driver		= {
++		.name	= "qcom-vibrator-ldo",
++		.pm	= pm_sleep_ptr(&qpnp_vib_pm_ops),
++		.of_match_table = qpnp_vib_id_table,
++	},
++};
++module_platform_driver(qpnp_vib_driver);
++
++MODULE_ALIAS("platform:qcom-vibrator-ldo");
++MODULE_DESCRIPTION("Qualcomm QPNP vibrator LDO driver (ff-memless)");
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("OpenCode <opencode@localhost>");
+diff --git a/drivers/input/misc/Kconfig b/drivers/input/misc/Kconfig
+index 123456789abc..23456789abcd 100644
+--- a/drivers/input/misc/Kconfig
++++ b/drivers/input/misc/Kconfig
+@@ -240,6 +240,19 @@ config INPUT_PM8XXX_VIBRATOR
+ 	  To compile this driver as module, choose M here: the
+ 	  module will be called pm8xxx-vibrator.
+ 
++config INPUT_QCOM_VIBRATOR_LDO
++	tristate "Qualcomm QPNP vibrator LDO support"
++	depends on MFD_SPMI_PMIC
++	select INPUT_FF_MEMLESS
++	help
++	  This option enables support for the LDO-driven vibration motor
++	  found on Qualcomm PM6150/PMI632 chips (qcom,qpnp-vibrator-ldo).
++	  This driver supports the ff-memless interface from the input
++	  framework.
++
++	  To compile this driver as module, choose M here: the
++	  module will be called qcom-vibrator-ldo.
++
+ config INPUT_PMIC8XXX_PWRKEY
+ 	tristate "Qualcomm PMIC8XXX power key support"
+ 	depends on MFD_PM8XXX
+diff --git a/drivers/input/misc/Makefile b/drivers/input/misc/Makefile
+index 123456789abc..23456789abcd 100644
+--- a/drivers/input/misc/Makefile
++++ b/drivers/input/misc/Makefile
+@@ -69,6 +69,7 @@ obj-$(CONFIG_INPUT_PCSPKR)		+= pcspkr.o
+ obj-$(CONFIG_INPUT_PF1550_ONKEY)	+= pf1550-onkey.o
+ obj-$(CONFIG_INPUT_PM8941_PWRKEY)	+= pm8941-pwrkey.o
+ obj-$(CONFIG_INPUT_PM8XXX_VIBRATOR)	+= pm8xxx-vibrator.o
++obj-$(CONFIG_INPUT_QCOM_VIBRATOR_LDO)	+= qcom-vibrator-ldo.o
+ obj-$(CONFIG_INPUT_PMIC8XXX_PWRKEY)	+= pmic8xxx-pwrkey.o
+ obj-$(CONFIG_INPUT_POWERMATE)		+= powermate.o
+ obj-$(CONFIG_INPUT_PWM_BEEPER)		+= pwm-beeper.o
+diff --git a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+index 123456789abc..23456789abcd 100644
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+@@ -132,5 +132,10 @@
+ &pm6150_vib {
+ 	status = "okay";
++	/* Use the dedicated LDO vibrator driver instead of the pmi632
++	 * compat layer in pm8xxx-vibrator; stock setpoint is 3.0 V.
++	 */
++	compatible = "qcom,qpnp-vibrator-ldo";
++	qcom,vib-ldo-volt-uv = <3000000>;
+ };
+ 
+ &pm6150_gpios {
+--
+2.47.3
+

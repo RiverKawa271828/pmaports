@@ -1,0 +1,43 @@
+From: Malte Schababerle <m.schababerle@gmail.com>
+Subject: [PATCH] ath10k: force passive scan on 5GHz for WCN3990
+
+WCN3990 firmware (WLAN.HL.3.2) has a bug where active scan does not
+tune the radio on 5GHz non-DFS channels. The radio reports identical
+rx_clear_count values across channels, indicating no RF tuning occurs.
+As a result, no 5GHz networks are discovered during active scan.
+
+Passive scan works correctly on all 5GHz channels.
+
+Backport for phoenix (WCN3998 identifying as WCN3990): root-causes the
+5GHz DHCP timeout seen on this device (APs never discovered on 5GHz
+active scan; DFS CH52 could associate because it is already passive).
+Source: https://lore.kernel.org/ath10k/20260322124822.230492-3-m.schababerle@gmail.com/
+Tested-on: OnePlus 7T (SM8150/WCN3990) WLAN.HL.3.2.0.c2-00006/-00011
+
+Signed-off-by: Malte Schababerle <m.schababerle@gmail.com>
+---
+ drivers/net/wireless/ath/ath10k/mac.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+index 24dd794e31ea2..f6829232f6b15 100644
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -3441,6 +3441,14 @@ static int ath10k_update_channel_list(struct ath10k *ar)
+ 			passive = channel->flags & IEEE80211_CHAN_NO_IR;
+ 			ch->passive = passive;
+
++			/* Force passive scan on 5GHz to work around WCN3990
++			 * firmware bug where active scan doesn't tune the
++			 * radio on 5GHz non-DFS channels.
++			 */
++			if (QCA_REV_WCN3990(ar) &&
++			    band == NL80211_BAND_5GHZ)
++				ch->passive = true;
++
+ 			/* the firmware is ignoring the "radar" flag of the
+ 			 * channel and is scanning actively using Probe Requests
+ 			 * on "Radar detection"/DFS channels which are not
+--
+2.47.3
+
