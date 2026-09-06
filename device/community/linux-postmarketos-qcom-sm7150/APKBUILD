@@ -4,7 +4,7 @@ maintainer="Danila Tikhonov <danila@jiaxyga.com>"
 _flavor="postmarketos-qcom-sm7150"
 pkgname=linux-$_flavor
 pkgver=7.1_rc3
-pkgrel=16
+pkgrel=18
 pkgdesc="Mainline Kernel fork for SM7150 devices"
 arch="aarch64"
 _carch="arm64"
@@ -67,7 +67,6 @@ source="
 	0032-arm64-dts-phoenix-add-ov8856-camera.patch
 	0033-power-supply-qcom-smbx-apsd-rerun-on-icl-change.patch
 	0035-camss-csiphy-sm7150-stock-lane-table.patch
-	0036-camss-7150-irq-debug-tmp.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -138,5 +137,4 @@ f192857868e4531b242e95bf32660e52309352f304767f127f8e694d9298137d0ef18496d4d3bffb
 da0fe17f4b22743b1647f5d890ad43503391367ec4a19444abfca175fea1dcf4fa96a68395e18238e54a327b42f8401ef64e88bc335ff85bae688addc25abd48  0032-arm64-dts-phoenix-add-ov8856-camera.patch
 7abc2a07bda87995bbd181b93b075477f23ba7ff3786a1c6bae662d13577313e2f39854959d4bd6beefb7ab964c24b88b2781fc3c24ae99603772785e4421353  0033-power-supply-qcom-smbx-apsd-rerun-on-icl-change.patch
 73abaae11593f3cbad6a3d2a9ad938f6c555ff6f1a51eeddada55d9841068465c2d9a711db22c13989b6ec0f7329c407c2d161fc56190fe7827e16e64a80785a  0035-camss-csiphy-sm7150-stock-lane-table.patch
-1def071e1ca7e23cc9d091b3f6162d87706c39f9664246219991a799a1fa8b12738ab4a359413609b4918aff3cadae68fc7047621c895a5a1f2ab437a0f93872  0036-camss-7150-irq-debug-tmp.patch
 "

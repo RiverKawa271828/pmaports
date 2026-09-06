@@ -31,4 +31,3 @@
 0032-arm64-dts-phoenix-add-ov8856-camera.patch
 0033-power-supply-qcom-smbx-apsd-rerun-on-icl-change.patch
 0035-camss-csiphy-sm7150-stock-lane-table.patch
-0036-camss-7150-irq-debug-tmp.patch
