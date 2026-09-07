@@ -3,7 +3,7 @@ maintainer="Ankit Pipalia <ankit@example.com>"
 pkgname=device-xiaomi-phoenix
 pkgdesc="Xiaomi POCO X2 / Redmi K30 4G"
 pkgver=1
-pkgrel=28
+pkgrel=30
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -46,6 +46,7 @@ install="
 	49-phoenix-network.rules
 	49-phoenix-timedate.rules
 	81-libssc-xiaomi-phoenix.rules
+	90-phoenix-backlight.rules
 	greetd-config.toml
 	msm-modem-uim-selection.service.d/phoenix-wait.conf
 	no-dnssec.conf
@@ -124,6 +125,11 @@ package() {
 		"$pkgdir"/usr/lib/systemd/system-preset/90-phoenix-timesync.preset
 	install -Dm644 "$srcdir"/81-libssc-xiaomi-phoenix.rules \
 		"$pkgdir"/usr/lib/udev/rules.d/81-libssc-xiaomi-phoenix.rules
+
+	# Plasma 6 has no uaccess rule for backlight; without this the user
+	# cannot adjust screen brightness at all (raw sysfs node, mode 0644).
+	install -Dm644 "$srcdir"/90-phoenix-backlight.rules \
+		"$pkgdir"/usr/lib/udev/rules.d/90-phoenix-backlight.rules
 
 	install -Dm644 "$srcdir"/greetd-config.toml \
 		"$pkgdir"/etc/greetd/config.toml
@@ -253,6 +259,7 @@ package() {
 		"$pkgdir"/usr/libexec/phoenix-usb-host-wake.sh
 	install -Dm644 "$srcdir"/phoenix-usb-host-wake.service \
 		"$pkgdir"/usr/lib/systemd/system/phoenix-usb-host-wake.service
+
 	# ------------------------------------------------------------------------
 
 	# Passwordless root access for default postmarketOS user over doas/sudo.
@@ -298,6 +305,7 @@ acd6efd61c21d2d42472aff03e9ed281748d0cd56b707fa02cfeac96522c825eb59fbc425ba42d5a
 7cb30f39579c9eda4918484470a386781df72b93fc54ac3c269eff926ae00ad448a38d672825500f6a60ec57af29fd4860060936adee7a1e0ae0a2f4f46bb8b9  49-phoenix-network.rules
 bf6d0e6eee097d5e80eda5c70197443f1a23d961f66a3997efd1a65d5acee48468784d25f32b600da37e552b48812d57039e46c5605c3488d2d01c035c084fc7  49-phoenix-timedate.rules
 2c16ba75e0077b2b1eaefa4c73b287475505a1aeb291ec29316d41cc094277320f9d2aaabfd91eb1dc0f488ab2d61a94faef16e7afe0f1e226779113761b9a37  81-libssc-xiaomi-phoenix.rules
+2a4b2d176d81a75fab396349cc8df5673a9a763157b7f5f1f7b2d214f12e525955b0ba7b6b85329c694f47a7b1376e2f156e9f4deb2f29233c9cbc853933bca4  90-phoenix-backlight.rules
 bb800eb84ddfd1fd5c643d3483710c3183873e4e1203c320dc3e82844e35244af00aa0ffa51af6a8bfd93c1ed2185fffa02d666377505c1f34962366cee05471  greetd-config.toml
 edc2c02c42ecbb8a01e99c62206af8a854ccc530bf74cab50d14895b1071631240a9d1611e8b4839a486ba96b61df6e9010a2536acfaaaa0a36f047c329f1e93  phoenix-wait.conf
 d05e663b91e799f2f270b457b0c8a263a9ff0e70ab64a5a517553d96ea7f5d350aac1321ab1c5bb83fb71636b0c0cf078b544563768c9075dbc09e78d9e47099  no-dnssec.conf
@@ -331,5 +339,4 @@ e93559017634e7efd34987827636789466920a9bb78635de699dfedf3d635f1a0ac90ea7aef6b1fa
 3e25bd9b8ec9e167d68211c96bf34d5d2fea1ba29eeb1730cd74d81250b659bcccde5d84bb6e0a21048cc9027ef5cc0d142886f32da1233bbd67703574e93b43  phoenix-typec-recover.sh
 782b0862643f2dae4a69eaf15b6577809702184795b47e4aaa48b140d2e01978231b6a7c4509ed986877378e1d58810ab7ec7e98e9a6de37bdecd3cbaf24daa4  phoenix-typec-recover.timer
 c6de9c9994be065fab7bf8bc080c37a5accbc69fa976ea73b1f7ffcdb9601696c910ec45e32fc0c869096f3a1521c60d80e4b48903c7006e26d6ed34ab5a7816  phoenix-usb-host-wake.service
-4a20f3ff065de2746d4505ef7695f8265c031d8719fc26454b5f5ac4047663f6f66f7f02d7b41d9fe95caa845b6084200a1de5a296edcb4e6f5ffe26260f9912  phoenix-usb-host-wake.sh
-"
+4a20f3ff065de2746d4505ef7695f8265c031d8719fc26454b5f5ac4047663f6f66f7f02d7b41d9fe95caa845b6084200a1de5a296edcb4e6f5ffe26260f9912  phoenix-usb-host-wake.sh"
