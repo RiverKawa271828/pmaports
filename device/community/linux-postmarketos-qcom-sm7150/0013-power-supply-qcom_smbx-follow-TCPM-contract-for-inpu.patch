@@ -1,0 +1,158 @@
+From 5af33e6f678d6d96b6863340504cd86c9940826e Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 10:21:00 +0800
+Subject: [PATCH 13/13] power: supply: qcom_smbx: follow TCPM contract for
+ input current limit
+
+Once a USB-PD contract is negotiated, APSD/BC1.2 classification is
+meaningless: PD adapters commonly present an SDP signature, so
+smb_status_change_work() programs the 500mA SDP floor and throttles
+e.g. a 9V/3A contract to ~4.5W of input (observed on PM6150/phoenix
+with a 90W adapter, reproducible across reboots).
+
+While the TCPM source psy reports a usable POWER_SUPPLY_PROP_CURRENT_MAX
+(the contract current under PD, the Type-C Rp grade otherwise), program
+it as the input current limit, clear USB51_MODE for anything above the
+500mA SDP floor, and hand the ICL back to the APSD path when the port
+or contract goes away. smb_status_change_work() must not overwrite a
+followed ICL: the write re-throttles the input and the resulting
+ICL-change IRQ only schedules another (bounded, but pointless) APSD
+rerun.
+
+Userspace can still lower POWER_SUPPLY_PROP_CURRENT_MAX on the charger
+psy as a thermal/mitigation override; it sticks until the contract
+current changes.
+---
+ drivers/power/supply/qcom_smbx.c | 78 +++++++++++++++++++++++++++++---
+ 1 file changed, 72 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index 9ef1bcfa9..b517e49ca 100644
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -311,12 +311,17 @@ struct smb_chip {
+ 
+ 	struct power_supply *chg_psy;
+ 
+-	/* USB-PD voltage following */
++	/* USB-PD voltage / ICL following */
+ 	struct delayed_work pd_update_work;
+ 	struct notifier_block pd_nb;
+ 	char pd_psy_name[64];
+ 	unsigned int pd_allowance;
+ 	unsigned int pd_fsw;
++	/*
++	 * ICL last programmed from the TCPM contract; 0 means the
++	 * BC1.2-based smb_status_change_work() path owns the ICL.
++	 */
++	unsigned int pd_icl_ua;
+ };
+ 
+ struct smb_match_data {
+@@ -646,12 +651,20 @@ static void smb_status_change_work(struct work_struct *work)
+ 	 * (phoenix): DCP chargers latched INHIBIT_CHARGE / STATUS=Full
+ 	 * forever while the battery drained.
+ 	 */
+-	regmap_update_bits(chip->regmap, chip->base + USBIN_ICL_OPTIONS,
+-			   USB51_MODE_BIT,
+-			   charger_type == POWER_SUPPLY_USB_TYPE_SDP ?
+-			   USB51_MODE_BIT : 0);
++	/*
++	 * When the TCPM follow path owns the ICL (PD contract up while
++	 * APSD still classifies the adapter as SDP), leave it alone:
++	 * overwriting re-throttles the input and the resulting ICL-change
++	 * IRQ only schedules another APSD rerun.
++	 */
++	if (!chip->pd_icl_ua) {
++		regmap_update_bits(chip->regmap, chip->base + USBIN_ICL_OPTIONS,
++				   USB51_MODE_BIT,
++				   charger_type == POWER_SUPPLY_USB_TYPE_SDP ?
++				   USB51_MODE_BIT : 0);
+ 
+-	smb_set_current_limit(chip, current_ua);
++		smb_set_current_limit(chip, current_ua);
++	}
+ 
+ 	/*
+ 	 * If the charger is in terminate/inhibit state from an earlier
+@@ -697,10 +710,12 @@ static void smb_pd_update_work(struct work_struct *work)
+ 	struct smb_chip *chip = container_of(to_delayed_work(work),
+ 					     struct smb_chip, pd_update_work);
+ 	unsigned int allow, fsw, vmax_uv = 0;
++	unsigned int contract_ua = 0;
+ 	union power_supply_propval val = { 0 };
+ 	struct power_supply *psy;
+ 	unsigned int online = 0, stat;
+ 	bool have_psy = true;
++	bool pd_contract = false;
+ 	int rc;
+ 
+ 	if (!chip->pd_psy_name[0]) {
+@@ -735,6 +750,21 @@ static void smb_pd_update_work(struct work_struct *work)
+ 				       &val);
+ 	if (!rc && val.intval > 0)
+ 		vmax_uv = val.intval;
++	rc = power_supply_get_property(psy, POWER_SUPPLY_PROP_CURRENT_MAX,
++				       &val);
++	if (!rc && val.intval > 0)
++		contract_ua = val.intval;
++	rc = power_supply_get_property(psy, POWER_SUPPLY_PROP_USB_TYPE, &val);
++	if (!rc) {
++		switch (val.intval) {
++		case POWER_SUPPLY_USB_TYPE_PD:
++		case POWER_SUPPLY_USB_TYPE_PD_PPS:
++		case POWER_SUPPLY_USB_TYPE_PD_PPS_SPR_AVS:
++		case POWER_SUPPLY_USB_TYPE_PD_SPR_AVS:
++			pd_contract = true;
++			break;
++		}
++	}
+ 	power_supply_put(psy);
+ 
+ 	if (chip->gen != SMB5)
+@@ -787,6 +817,42 @@ static void smb_pd_update_work(struct work_struct *work)
+ 			 vmax_uv, allow, fsw);
+ 	}
+ 
++	/*
++	 * ICL follow: once a USB-PD contract is up, the BC1.2/APS(D)
++	 * classification is meaningless -- PD adapters commonly present
++	 * an SDP signature, so smb_status_change_work() leaves the 500mA
++	 * SDP floor programmed and the contract (e.g. 9V/3A) is
++	 * throttled to ~4.5W of input (observed on phoenix with a 90W
++	 * adapter). While the TCPM reports a usable current -- the
++	 * contract current under PD, the Type-C Rp grade otherwise --
++	 * make it the input current limit. USB51_MODE has to come off
++	 * at the same time or the hardware silently caps at 500mA.
++	 */
++	if (online && contract_ua) {
++		unsigned int icl_ua = min(contract_ua,
++					  chip->current_limit_max_ua);
++
++		if (chip->pd_icl_ua != icl_ua) {
++			dev_info(chip->dev, "PD follow: ICL -> %u uA (%s)\n",
++				 icl_ua, pd_contract ? "PD contract" :
++				 "Type-C Rp");
++			regmap_update_bits(chip->regmap,
++					   chip->base + USBIN_ICL_OPTIONS,
++					   USB51_MODE_BIT,
++					   icl_ua > SDP_CURRENT_UA ?
++					   0 : USB51_MODE_BIT);
++			rc = smb_set_current_limit(chip, icl_ua);
++			if (rc < 0)
++				goto reschedule;
++			chip->pd_icl_ua = icl_ua;
++		}
++	} else if (chip->pd_icl_ua) {
++		/* Port or contract went away: hand the ICL back to the
++		 * APSD classification. */
++		chip->pd_icl_ua = 0;
++		schedule_delayed_work(&chip->status_change_work, 0);
++	}
++
+ 	/*
+ 	 * A contract change while the input OV window was still wrong can
+ 	 * leave the charger latched in PAUSE/INHIBIT even after the window
+-- 
+2.43.0
+

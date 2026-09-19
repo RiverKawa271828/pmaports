@@ -1,6 +1,17 @@
+From 1797cd11450efe041ef02e3405a13397798911ff Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:16:52 +0800
+Subject: [PATCH 09/13] media: camss: csiphy: stock lane table for sm7150
+
+---
+ .../qcom/camss/camss-csiphy-3ph-1-0.c         | 243 ++++++++++--------
+ 1 file changed, 129 insertions(+), 114 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
+index eecba4f0b..c2ee7d9c3 100644
 --- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
 +++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
-@@ -297,122 +297,137 @@
+@@ -297,122 +297,137 @@ csiphy_lane_regs lane_regs_sc8280xp[] = {
  
  /* GEN2 1.2 2PH */
  static const struct
@@ -34,8 +45,7 @@
 -	{0x0038, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
 -	{0x005C, 0xC0, 0x00, CSIPHY_DEFAULT_PARAMS},
 -	{0x0060, 0x0D, 0x00, CSIPHY_DEFAULT_PARAMS},
-+	/* common: 2PH mode select (stock csiphy_common_reg_1_2) */
- 	{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+-	{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
 -	{0x0000, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 -	{0x0730, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
 -	{0x0C84, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -127,7 +137,8 @@
 -	{0x0638, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
 -	{0x065C, 0xC0, 0x00, CSIPHY_DEFAULT_PARAMS},
 -	{0x0660, 0x0D, 0x00, CSIPHY_DEFAULT_PARAMS},
--	{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
++	/* common: 2PH mode select (stock csiphy_common_reg_1_2) */
+ 	{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
 -	{0x0000, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 +	/* D0 */
 +	{
@@ -252,3 +263,6 @@
  };
  
  /* GEN2 1.2.1 2PH */
+-- 
+2.43.0
+

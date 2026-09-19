@@ -4,7 +4,7 @@ maintainer="Danila Tikhonov <danila@jiaxyga.com>"
 _flavor="postmarketos-qcom-sm7150"
 pkgname=linux-$_flavor
 pkgver=7.1_rc3
-pkgrel=18
+pkgrel=19
 pkgdesc="Mainline Kernel fork for SM7150 devices"
 arch="aarch64"
 _carch="arm64"
@@ -34,39 +34,19 @@ _tag="$pkgver"
 source="
 	$pkgname-v$_tag.tar.gz::$url/archive/v$_tag.tar.gz
 	config-$_flavor.$arch
-	0001-dts-add-xiaomi-phoenix.patch
-	0002-phoenix-dts.patch
-	0003-phoenix-panel.patch
-	0004-pm6150-add-charger-support.patch
-	0005-add-wcn3998-wifi-bt-power-management.patch
-	0006-ath10k-qmi-treat-malformed-host-cap-as-non-fatal.patch
-	0007-smbx-fix-recharge-after-termination.patch
-	0008-smbx-smb5-aicl-icl-status.patch
-	0009-phoenix-q6asm-multimedia-dai.patch
-	0010-phoenix-enable-pmic-vibrator.patch
-	0011-remoteproc-q6v5-make-handover-irq-one-shot.patch
-	0012-ath10k-skip-quiet-mode-wcn3990.patch
-	0013-ath10k-force-passive-scan-5ghz-wcn3990.patch
-	0014-input-add-qcom-vibrator-ldo-driver.patch
-	0015-tfa987x-add-speaker-volume-control.patch
-	0016-arm64-dts-phoenix-add-audio-nodes.patch
-	0017-power-supply-qcom-qg-report-status.patch
-	0018-power-supply-qcom-smbx-clear-usb51-for-non-sdp.patch
-	0019-power-supply-qcom-smbx-smb5-status-encoding.patch
-	0021-power-supply-qcom-qg-sram-batt-id.patch
-	0022-arm64-dts-pm6150-qgauge-batt-id-sram.patch
-	0023-power-supply-qcom-qg-battery-identity.patch
-	0024-power-supply-qcom-smbx-follow-negotiated-pd-voltage.patch
-	0025-arm64-dts-phoenix-add-ramoops.patch
-	0026-misc-fastrpc-fix-find_vma-dma-corruption.patch
-	0027-misc-fastrpc-fix-user-uaf-workqueue.patch
-	0028-arm64-dts-phoenix-enable-venus.patch
-	0029-power-supply-qcom-qg-ocv-lut-capacity.patch
-	0030-media-venus-add-sm7150-support.patch
-	0031-media-venus-fw-idle-debug.patch
-	0032-arm64-dts-phoenix-add-ov8856-camera.patch
-	0033-power-supply-qcom-smbx-apsd-rerun-on-icl-change.patch
-	0035-camss-csiphy-sm7150-stock-lane-table.patch
+	0001-arm64-dts-qcom-phoenix-device-support-consolidated-D.patch
+	0002-drm-panel-add-G7B-37.02.0A-DSC-panel-driver-phoenix.patch
+	0003-input-misc-add-Qualcomm-QPNP-vibrator-LDO-driver.patch
+	0004-ASoC-tfa987x-add-speaker-gain-control.patch
+	0005-ath10k-WCN3990-fixes-skip-quiet-mode-force-5GHz-pass.patch
+	0006-remoteproc-qcom-q6v5-make-handover-IRQ-one-shot.patch
+	0007-misc-fastrpc-fix-DMA-address-corruption-and-user-UAF.patch
+	0008-media-venus-add-SM7150-support-and-firmware-idle-deb.patch
+	0009-media-camss-csiphy-stock-lane-table-for-sm7150.patch
+	0010-power-supply-qcom_smbx-SDP-ICL-AICL-handling-and-PD-.patch
+	0011-power-supply-qcom_qg-software-gauge-and-battery-iden.patch
+	0012-power-supply-qcom_smbx-program-FCC-from-DT-battery-p.patch
+	0013-power-supply-qcom_smbx-follow-TCPM-contract-for-inpu.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -104,37 +84,17 @@ package() {
 sha512sums="
 bb837959e337c66ff374d8f3aac6593723c4f4eb69fb18f9ff25c5c096c6656fd71149e105255c0f97c83e0bf547b0b0e94ca23eabde7b5f88308e9ecd784e3d  linux-postmarketos-qcom-sm7150-v7.1_rc3.tar.gz
 00be97c11f4d04caa7b7498cf6d259d21490d1da4be0cf4e9eb6d5c83bc42b81e7ff1bfc9d3a407ea1a4525d1af7f6aae500ea530b1220888364510e4195c750  config-postmarketos-qcom-sm7150.aarch64
-3be477e1cce9ba41ecabc782bd3ae51e929870b66ceb1882b14dec1160c69b260da6fc2f5bc1237040e4e5ea5b59e65ee65cc9809066c96597a6ccc9856b4087  0001-dts-add-xiaomi-phoenix.patch
-960ac4b3553ed34cee123df6910251393389b508f8ee98217c2db5c076a1cd3e2b017244c80015b094ceac3083f37dd1304889ac88f4222cba200cef136e3f28  0002-phoenix-dts.patch
-a7ea1467205fc42162d8232f1db5b6ec923c80903600ff3a3d44227ed89183b1c8e14839fd2ab484548d7c8697ef1a488bbe672ed49c93162d85ee8093cf94d6  0003-phoenix-panel.patch
-7de46996d5d22af8cfdb225a402cf9510a96ef6cf14ef752f2a78a0841ec02912fc4c043869774c4b0db6d69555fbc11e11a575e3e1b5c535566db79d16d172b  0004-pm6150-add-charger-support.patch
-8ad9e081afd9fe41631adf20ebe6f510e9d736177a4a244e4040d18c904358a485d230aa3daf706f1f552668dba10cd93ecbd7769b123284405619a06f608381  0005-add-wcn3998-wifi-bt-power-management.patch
-f0576ce949c41014f6ca40908eabe866eef0d9de43248203cf9d2fe920c0d406013c9f2a50126327eadd1738f897bbc0f42c7d94b156373ec15354e8f9eaa244  0006-ath10k-qmi-treat-malformed-host-cap-as-non-fatal.patch
-5f8414625380fef047f132fad6e9fb5ce5d518840757752e2eee65c19fc688d1815140309c108d416de124c1f74097fe4bda870e74a07682f400843eb4f32752  0007-smbx-fix-recharge-after-termination.patch
-9887ae6fe9309800c9a16b0491f2ffec66ed9b71255d93557af2530d57a80bce2fdcc708e146a758b4ed58177fee220ced5136e6f639cd5e977398ea1803eba7  0008-smbx-smb5-aicl-icl-status.patch
-f2d190b7c4ffb29798362e684811087b214f73b23fcfca7a4b7e0d6598a1e2cf88ff37501e81518e2ea82b2ad5213b24d3274aa5b7ea922a38cece3be7f76d70  0009-phoenix-q6asm-multimedia-dai.patch
-1f213de1c5bdcf86a4eea5a0452b9326e5a6019084c6900101720af54632f2dd5cfb060db9222f6ee16f99b02fe3c9b1165519953af2594a4909c1a275ef0425  0010-phoenix-enable-pmic-vibrator.patch
-9a0bdf570ddcf10c59f3615e3a64e6562a7958d5c08a19e91c32784a571fe4bd12999b43257ac103af1f07f518893b2b41a65f5eefc233b29b1818fd27c66b69  0011-remoteproc-q6v5-make-handover-irq-one-shot.patch
-ff665eb2d49a95623d7269ef723c38cc422e0fe436c425811f7251a19b1f48b6e8e9e81687ad34f361abe86ef52eb360aa1e54e6f6616b740d15186e910ebaa0  0012-ath10k-skip-quiet-mode-wcn3990.patch
-63e803d3a7473af25285b352c2cb98d93d86ef06b95441d283039eed6ea3956711be66ec30ea75b8fb84dfe405c8143c0766db9e5bbf6974422e09f441ebdc58  0013-ath10k-force-passive-scan-5ghz-wcn3990.patch
-4c4df50241aac8b5b984fead1e3f073d9086d43304c833aa2b5e8d721eb45f60d05585c8f8bc038e62563d10d8afeac824e064beda1352e5055b31dc3c07739f  0014-input-add-qcom-vibrator-ldo-driver.patch
-c7ce3d52ebfb2f996d9327950f70c9b6515743ceb7fb85813214b6fda808b77e3d81bc66eeff3ed5b4c2deb7463eacaba1e424699e4b1cdf14620aac28ec21bb  0015-tfa987x-add-speaker-volume-control.patch
-06c5fe3258d1ed9cf0ffd928307539af4dd21fcf45054cb85aff3644f4ad873009b2ed8b96abee043abf05709add4d3a27d22e9f516fae420ea99e63fc9587b1  0016-arm64-dts-phoenix-add-audio-nodes.patch
-1012e3862dce23808d331d609bcda53b9fb8968ff9572c8b2a4d8823ebf9f4df6c19a7812701976da4ff57ff45604b0376699fd3f8f3f34d69671af58e448131  0017-power-supply-qcom-qg-report-status.patch
-a556af974d3d7012f960e92ed638d765e5d91f59990e0a3356ff8d271ef8818acebc888c1adb98bf8123bbe92f4d66a146aaf1678405aaaf249fc902e4abcba4  0018-power-supply-qcom-smbx-clear-usb51-for-non-sdp.patch
-b433b63cc6bd9c41a30df00c74896f2b10454fa1dfe13fb0f64752624b58ab091a3938eec0eeb2d80d1db6710d2c71d1e77b2a1814b889b44c6b84d5c32b3d88  0019-power-supply-qcom-smbx-smb5-status-encoding.patch
-be1ba7ca15b8e0411b96e016f8c36d49ec24a8c2ed359ac83f1f2753e5cc3dc012cdc870d4d31b1b5f04eb814bbb81080de5d56208e2f4be4bbd3c5372014365  0021-power-supply-qcom-qg-sram-batt-id.patch
-e94b9e28a017873fcde34c06100cc378b9063da5fa45322e20ea4a570af1d1125d6a56460196e26d5c6e39bd7c2358806a145b178a484bbcdd2f2d77a7d63a7e  0022-arm64-dts-pm6150-qgauge-batt-id-sram.patch
-9e1b857b6b6274d2085173e7214622505d6745ab2be1a9019dea2cd8bf8c1b750dd28166b8409c8e218e9f7e6067074757e2c381df15b81262f5500923e1450b  0023-power-supply-qcom-qg-battery-identity.patch
-0f3f2df93a86e350287d2ec71e6ccfdc82d3b1f2de130a242369973f7b49478d1d7be4947b3231edcc2f7ec01750359a3d508b64dc403578022f220f2bd3becf  0024-power-supply-qcom-smbx-follow-negotiated-pd-voltage.patch
-b54e8a43010840d009d4b0a72ec6bce5520667d99460f84d5f6a6a87b7b7b2e09e4e8284bba7481ffef3bfeef68b01ee3e2d570703fbfb2781be8bbf94e2f490  0025-arm64-dts-phoenix-add-ramoops.patch
-6afd58cb0cd53462c42a7f113eb2cab5376e194c413370cef29012df7a71adc69c1e24fddaba7d06975907da2473383c420c6c0879b56fd59d15d7101c95dcb1  0026-misc-fastrpc-fix-find_vma-dma-corruption.patch
-59246cfb3764ba15d47e4613a71b05f0aaaa18628f39f264513728c20b8f52a115b5631aecd4f78f7a1de523147d29ceadd548de132135818b8ca87e6ae654b6  0027-misc-fastrpc-fix-user-uaf-workqueue.patch
-46a7d8f5276448ce7bb323554cfc39ce8c5d9f01c3c327acf12138ae2862fdb96770e9ee7b45a88f9083c342e931ae0d012bb46399da0217b4589f89eb3f4817  0028-arm64-dts-phoenix-enable-venus.patch
-4270417e66a32610cd5ffd6ba5d0aa8a934837a4196ad82839f94ccca0fb0c3a179fe7d5695d9c5a8b742c9317d27299b2f991c00bd853ab2b03e6c2d0f769fa  0029-power-supply-qcom-qg-ocv-lut-capacity.patch
-f192857868e4531b242e95bf32660e52309352f304767f127f8e694d9298137d0ef18496d4d3bffb9dd16de024376ee826de6aadb22b8e56962251607359b8a5  0030-media-venus-add-sm7150-support.patch
-94ca2045c31f099950b6ff4675a8b80b8e4d13a58899d783d6ddc461d01832f756505b8288bcf367c3aa7da2e61db45968b0af2488e23dee5cbbb39cccede782  0031-media-venus-fw-idle-debug.patch
-da0fe17f4b22743b1647f5d890ad43503391367ec4a19444abfca175fea1dcf4fa96a68395e18238e54a327b42f8401ef64e88bc335ff85bae688addc25abd48  0032-arm64-dts-phoenix-add-ov8856-camera.patch
-7abc2a07bda87995bbd181b93b075477f23ba7ff3786a1c6bae662d13577313e2f39854959d4bd6beefb7ab964c24b88b2781fc3c24ae99603772785e4421353  0033-power-supply-qcom-smbx-apsd-rerun-on-icl-change.patch
-73abaae11593f3cbad6a3d2a9ad938f6c555ff6f1a51eeddada55d9841068465c2d9a711db22c13989b6ec0f7329c407c2d161fc56190fe7827e16e64a80785a  0035-camss-csiphy-sm7150-stock-lane-table.patch
+cb765ad1414b36a40e49db068352b86977cf292c41071280c4eeed18783cd2bfc818014b4ec9038d6a847cee9655b8a483c23b9b2c6135033a8b098cda34b589  0001-arm64-dts-qcom-phoenix-device-support-consolidated-D.patch
+57cc9eb1ec6c4fa18a8a1be46701890ee8bd463ade13ec626c22fb16b968deff66f21bb5ca550c3670872a033b9e5a457b96599fad5523c3305cef6bdcff421c  0002-drm-panel-add-G7B-37.02.0A-DSC-panel-driver-phoenix.patch
+009b8aaca7e464cc9735383533b03df5c3dc42fe62dd0df81bac720588ba60e8e1c899cc9660978fc4e3624696fb55afd31587086c6254407c53e4328fe256e1  0003-input-misc-add-Qualcomm-QPNP-vibrator-LDO-driver.patch
+5356f34882992eae8b03e9b279001c7eb4d5b5c159c9b9feae12c0ac841502b0fec86eade89f9d6fc01abb51c4d4e198e2174ac09e165f5c5ee407077049b146  0004-ASoC-tfa987x-add-speaker-gain-control.patch
+c5dedb04da6246c58e3fe3ba4e5b200f120164c0fff43f6f56f26d2fa843270d41386a8ba62d3fc488cce9fa174a1a0516030707f4d3f3b037fafba22e0d7334  0005-ath10k-WCN3990-fixes-skip-quiet-mode-force-5GHz-pass.patch
+fa0c64fd704b346e63a9f3afaadf9619f71c020aa46aa60bbfbb5ce51e982825210605b6f5044143a5e6328859bf6e8f98b9c33df5c9e91e0e04324fa506d736  0006-remoteproc-qcom-q6v5-make-handover-IRQ-one-shot.patch
+eda304fe9630516a8789f7cd4f5f20d9740abd421e96c9bef2213f59424a9be34b88be98357cfb890753c81252b9d4dc47daef0f716239517a0ae8e69a34860f  0007-misc-fastrpc-fix-DMA-address-corruption-and-user-UAF.patch
+479f72850a41a032cbe1884126b322743679b7dadf7bda72f316f91247768a4c8e98a876e70de8d8fae6935e093ea91426e795dfebe0bbfc76a7665355923e0a  0008-media-venus-add-SM7150-support-and-firmware-idle-deb.patch
+9dd4c5b1440e2e677bd71d9ca58a711955acb44daaa67cad10a5854d3757dc6431355635c3ff1dd9fc7fb257f83d58500bf8b391bbbf36c85183f94d22b2040d  0009-media-camss-csiphy-stock-lane-table-for-sm7150.patch
+dddf62d7997c8fd964a5ea94120fbb88a00f1add0fc515c6977448eb70ee3c9c117697117f8cea4696e6c64d8115ff627232dd8d0bf038c9be5357885bd68098  0010-power-supply-qcom_smbx-SDP-ICL-AICL-handling-and-PD-.patch
+b6879ed9d3745fe2085bab8d1f86f534c743f8f90bd9bb948c45d8e5fae47920ea3788c011521ce15ea747377f32ec35997e909d880336026a034f3624ccf641  0011-power-supply-qcom_qg-software-gauge-and-battery-iden.patch
+905694ebffe7be831cb07674cf026154671fe1513ad971f31d61229717cface01f82a493cbaf52be8456afb06dae237ff994fcd793e128f5a812b1adc6616fc5  0012-power-supply-qcom_smbx-program-FCC-from-DT-battery-p.patch
+a6155f33981b4068466444cde215b3cbde6b8d114b1c678c123bf891531ed8b9fdac6d9010a52fae5e5b97b1761747b6c132d5640c8a0c1f28ad82cf5ebf38ed  0013-power-supply-qcom_smbx-follow-TCPM-contract-for-inpu.patch
 "

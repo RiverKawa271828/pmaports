@@ -1,30 +1,15 @@
-From bb7c5d6f5b41d192fa81ce404e463f5d3ce70cb3 Mon Sep 17 00:00:00 2001
-From: Abel Vesa <abel.vesa@oss.qualcomm.com>
-Date: Fri, 12 Jun 2026 14:09:08 +0300
-Subject: [PATCH] remoteproc: qcom: q6v5: Make handover IRQ one-shot
+From 87f9f25c838622b9d94d58a2b7a355fb0064fb6c Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:16:52 +0800
+Subject: [PATCH 06/13] remoteproc: qcom: q6v5: make handover IRQ one-shot
 
-The handover interrupt is expected to be consumed once during each prepare
-cycle. If the remote processor keeps signalling handover after the first
-event, qcom_q6v5 currently logs the duplicate interrupt repeatedly while
-leaving the IRQ enabled.
-
-Track the handover IRQ enable state explicitly and route all handover IRQ
-enable/disable operations through idempotent helpers. Request the handover
-IRQ with IRQF_NO_AUTOEN so it is only enabled through the helper during
-prepare. The handover handler disables it after marking handover as issued,
-while unprepare disables and synchronizes it before checking whether
-handover was issued.
-
-Signed-off-by: Abel Vesa <abel.vesa@oss.qualcomm.com>
-Link: https://lore.kernel.org/r/20260612-rproc-q6v5-handover-irq-one-shot-v1-1-bb688f4446b3@oss.qualcomm.com
-Signed-off-by: Bjorn Andersson <andersson@kernel.org>
 ---
  drivers/remoteproc/qcom_q6v5.c | 54 +++++++++++++++++++++++++++-------
  drivers/remoteproc/qcom_q6v5.h |  4 +++
  2 files changed, 48 insertions(+), 10 deletions(-)
 
 diff --git a/drivers/remoteproc/qcom_q6v5.c b/drivers/remoteproc/qcom_q6v5.c
-index a11d8ace554bc1..0206a4a19254d8 100644
+index 58d5b85e5..c66cca05c 100644
 --- a/drivers/remoteproc/qcom_q6v5.c
 +++ b/drivers/remoteproc/qcom_q6v5.c
 @@ -36,6 +36,40 @@ static int q6v5_load_state_toggle(struct qcom_q6v5 *q6v5, bool enable)
@@ -109,7 +94,7 @@ index a11d8ace554bc1..0206a4a19254d8 100644
  	return IRQ_HANDLED;
  }
  
-@@ -257,6 +289,8 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
+@@ -256,6 +288,8 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
  	q6v5->crash_reason = crash_reason;
  	q6v5->handover = handover;
  
@@ -118,7 +103,7 @@ index a11d8ace554bc1..0206a4a19254d8 100644
  	init_completion(&q6v5->start_done);
  	init_completion(&q6v5->stop_done);
  
-@@ -305,13 +339,13 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
+@@ -304,13 +338,13 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
  
  	ret = devm_request_threaded_irq(&pdev->dev, q6v5->handover_irq,
  					NULL, q6v5_handover_interrupt,
@@ -135,7 +120,7 @@ index a11d8ace554bc1..0206a4a19254d8 100644
  	q6v5->stop_irq = platform_get_irq_byname(pdev, "stop-ack");
  	if (q6v5->stop_irq < 0)
 diff --git a/drivers/remoteproc/qcom_q6v5.h b/drivers/remoteproc/qcom_q6v5.h
-index 5a859c41896e99..8991ff09057926 100644
+index 5a859c418..8991ff090 100644
 --- a/drivers/remoteproc/qcom_q6v5.h
 +++ b/drivers/remoteproc/qcom_q6v5.h
 @@ -5,6 +5,7 @@
@@ -156,3 +141,6 @@ index 5a859c41896e99..8991ff09057926 100644
  	bool handover_issued;
  
  	struct completion start_done;
+-- 
+2.43.0
+

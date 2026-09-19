@@ -1,0 +1,297 @@
+From 8b1911c3726a7969c5298f68703c2c3f2917f8f5 Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:16:52 +0800
+Subject: [PATCH 08/13] media: venus: add SM7150 support and firmware idle
+ debug knobs
+
+---
+ drivers/media/platform/qcom/venus/core.c      | 76 +++++++++++++++++++
+ drivers/media/platform/qcom/venus/core.h      |  1 +
+ drivers/media/platform/qcom/venus/hfi_msgs.c  |  2 +
+ drivers/media/platform/qcom/venus/hfi_venus.c | 10 +++
+ drivers/media/platform/qcom/venus/vdec.c      | 17 +++++
+ drivers/media/platform/qcom/venus/venc.c      | 17 +++++
+ 6 files changed, 123 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/venus/core.c b/drivers/media/platform/qcom/venus/core.c
+index 7e639760c..7793b307d 100644
+--- a/drivers/media/platform/qcom/venus/core.c
++++ b/drivers/media/platform/qcom/venus/core.c
+@@ -574,12 +574,28 @@ static void venus_core_shutdown(struct platform_device *pdev)
+ 	pm_runtime_put_sync(core->dev);
+ }
+ 
++bool venus_keep_powered;
++module_param_named(keep_powered, venus_keep_powered, bool, 0444);
++MODULE_PARM_DESC(keep_powered,
++		 "Skip runtime suspend/power-collapse entirely (the video core "
++		 "stays powered at all times).  Workaround for firmware that "
++		 "never enters idle/WFI, e.g. sm7150 VIDEO.IR.1.2-00022.  While "
++		 "set, the vdec/venc child devices also pin their runtime PM so "
++		 "their autosuspend cannot power off vcodec0/vcodec1_gdsc behind "
++		 "a core that never suspends.");
++EXPORT_SYMBOL_GPL(venus_keep_powered);
++
+ static __maybe_unused int venus_runtime_suspend(struct device *dev)
+ {
+ 	struct venus_core *core = dev_get_drvdata(dev);
+ 	const struct venus_pm_ops *pm_ops = core->pm_ops;
+ 	int ret;
+ 
++	if (venus_keep_powered) {
++		dev_dbg(dev, "keep_powered: skipping runtime suspend\n");
++		return 0;
++	}
++
+ 	ret = hfi_core_suspend(core);
+ 	if (ret)
+ 		return ret;
+@@ -635,6 +651,15 @@ static __maybe_unused int venus_runtime_resume(struct device *dev)
+ 	const struct venus_pm_ops *pm_ops = core->pm_ops;
+ 	int ret;
+ 
++	/*
++	 * With keep_powered the core was never actually powered down, so
++	 * skip the power-on/HFI restart sequence once the core has been
++	 * initialised.  The very first resume during probe must still run
++	 * (core->state is CORE_UNINIT then).
++	 */
++	if (venus_keep_powered && core->state >= CORE_INIT)
++		return 0;
++
+ 	ret = icc_set_bw(core->video_path, kbps_to_icc(20000), 0);
+ 	if (ret)
+ 		return ret;
+@@ -949,6 +974,56 @@ static const struct venus_resources sc7180_res = {
+ 	.enc_nodename = "video-encoder",
+ };
+ 
++static const struct freq_tbl sm7150_freq_table[] = {
++	{ 0, 533000000 },
++	{ 0, 444000000 },
++	{ 0, 365000000 },
++	{ 0, 338000000 },
++	{ 0, 240000000 },
++};
++
++static const struct bw_tbl sm7150_bw_table_enc[] = {
++	{  972000,  750000, 0, 0, 0 },	/* 3840x2160@30 */
++	{  489600,  451000, 0, 0, 0 },	/* 1920x1080@60 */
++	{  244800,  234000, 0, 0, 0 },	/* 1920x1080@30 */
++};
++
++static const struct bw_tbl sm7150_bw_table_dec[] = {
++	{ 1036800, 1386000, 0, 1875000, 0 },	/* 4096x2160@30 */
++	{  489600,  865000, 0, 1146000, 0 },	/* 1920x1080@60 */
++	{  244800,  530000, 0,  583000, 0 },	/* 1920x1080@30 */
++};
++
++static const struct venus_resources sm7150_res = {
++	.freq_tbl = sm7150_freq_table,
++	.freq_tbl_size = ARRAY_SIZE(sm7150_freq_table),
++	.bw_tbl_enc = sm7150_bw_table_enc,
++	.bw_tbl_enc_size = ARRAY_SIZE(sm7150_bw_table_enc),
++	.bw_tbl_dec = sm7150_bw_table_dec,
++	.bw_tbl_dec_size = ARRAY_SIZE(sm7150_bw_table_dec),
++	.clks = {"core", "iface", "bus" },
++	.clks_num = 3,
++	.vcodec0_clks = { "vcodec0_core", "vcodec0_bus" },
++	.vcodec_clks_num = 2,
++	.vcodec_pmdomains = (const char *[]) { "venus", "vcodec0" },
++	.vcodec_pmdomains_num = 2,
++	.opp_pmdomain = (const char *[]) { "cx" },
++	.vcodec_num = 1,
++	.hfi_version = HFI_VERSION_4XX,
++	.vpu_version = VPU_VERSION_AR50,
++	.vmem_id = VIDC_RESOURCE_NONE,
++	.vmem_size = 0,
++	.vmem_addr = 0,
++	.dma_mask = 0xe0000000 - 1,
++	.cp_start = 0,
++	.cp_size = 0x70800000,
++	.cp_nonpixel_start = 0x1000000,
++	.cp_nonpixel_size = 0x24800000,
++	.fwname = "qcom/venus-5.4/venus.mbn",
++	.dec_nodename = "video-decoder",
++	.enc_nodename = "video-encoder",
++};
++
+ static const struct freq_tbl sm8250_freq_table[] = {
+ 	{ 0, 444000000 },
+ 	{ 0, 366000000 },
+@@ -1129,6 +1204,7 @@ static const struct of_device_id venus_dt_match[] = {
+ 	{ .compatible = "qcom,sdm660-venus", .data = &sdm660_res, },
+ 	{ .compatible = "qcom,sdm845-venus", .data = &sdm845_res, },
+ 	{ .compatible = "qcom,sdm845-venus-v2", .data = &sdm845_res_v2, },
++	{ .compatible = "qcom,sm7150-venus", .data = &sm7150_res, },
+ 	{ .compatible = "qcom,sm8250-venus", .data = &sm8250_res, },
+ 	{ }
+ };
+diff --git a/drivers/media/platform/qcom/venus/core.h b/drivers/media/platform/qcom/venus/core.h
+index 7506f5d0f..9614eddaf 100644
+--- a/drivers/media/platform/qcom/venus/core.h
++++ b/drivers/media/platform/qcom/venus/core.h
+@@ -31,6 +31,7 @@
+ #define VENUS_MAX_FPS			240
+ 
+ extern int venus_fw_debug;
++extern bool venus_keep_powered;
+ 
+ struct freq_tbl {
+ 	unsigned int load;
+diff --git a/drivers/media/platform/qcom/venus/hfi_msgs.c b/drivers/media/platform/qcom/venus/hfi_msgs.c
+index 47b99d5b5..2fdb1279d 100644
+--- a/drivers/media/platform/qcom/venus/hfi_msgs.c
++++ b/drivers/media/platform/qcom/venus/hfi_msgs.c
+@@ -322,6 +322,8 @@ sys_get_prop_image_version(struct venus_core *core,
+ 		goto done;
+ 
+ 	dev_err(dev, VDBGL "error reading F/W version\n");
++	dev_err(dev, VDBGL "raw F/W version string (%d bytes): %.*s\n",
++		req_bytes, min(req_bytes, 64), (const char *)img_ver);
+ 	return;
+ 
+ done:
+diff --git a/drivers/media/platform/qcom/venus/hfi_venus.c b/drivers/media/platform/qcom/venus/hfi_venus.c
+index bd82066bb..ed00e66bf 100644
+--- a/drivers/media/platform/qcom/venus/hfi_venus.c
++++ b/drivers/media/platform/qcom/venus/hfi_venus.c
+@@ -10,6 +10,7 @@
+ #include <linux/interrupt.h>
+ #include <linux/iopoll.h>
+ #include <linux/kernel.h>
++#include <linux/module.h>
+ #include <linux/slab.h>
+ 
+ #include "core.h"
+@@ -131,6 +132,10 @@ struct venus_hfi_device {
+ 
+ static bool venus_pkt_debug;
+ int venus_fw_debug = HFI_DEBUG_MSG_ERROR | HFI_DEBUG_MSG_FATAL;
++module_param_named(fw_debug, venus_fw_debug, int, 0444);
++MODULE_PARM_DESC(fw_debug,
++		 "Video firmware debug verbosity bitmask (1=low 2=med 4=high "
++		 "8=error 16=fatal 32=perf); sent to the firmware at core init");
+ static bool venus_fw_low_power_mode = true;
+ static int venus_hw_rsp_timeout = 1000;
+ static bool venus_fw_coverage;
+@@ -1584,6 +1589,7 @@ static int venus_suspend_3xx(struct venus_core *core)
+ 	struct venus_hfi_device *hdev = to_hfi_priv(core);
+ 	struct device *dev = core->dev;
+ 	void __iomem *cpu_cs_base = hdev->core->cpu_cs_base;
++	void __iomem *wrapper_base = hdev->core->wrapper_base;
+ 	u32 ctrl_status;
+ 	bool val;
+ 	int ret;
+@@ -1616,6 +1622,10 @@ static int venus_suspend_3xx(struct venus_core *core)
+ 				 1500, 100 * 1500);
+ 	if (ret) {
+ 		dev_err(dev, "wait for cpu and video core idle fail (%d)\n", ret);
++		dev_err(dev, "cpu_status %#x ctrl_status %#x intr_status %#x\n",
++			readl(wrapper_base + WRAPPER_CPU_STATUS),
++			ctrl_status,
++			readl(wrapper_base + WRAPPER_INTR_STATUS));
+ 		return ret;
+ 	}
+ 
+diff --git a/drivers/media/platform/qcom/venus/vdec.c b/drivers/media/platform/qcom/venus/vdec.c
+index daa8f5661..2e52d87e6 100644
+--- a/drivers/media/platform/qcom/venus/vdec.c
++++ b/drivers/media/platform/qcom/venus/vdec.c
+@@ -1822,6 +1822,15 @@ static int vdec_probe(struct platform_device *pdev)
+ 	pm_runtime_use_autosuspend(dev);
+ 	pm_runtime_enable(dev);
+ 
++	/*
++	 * With keep_powered the core stays up for good; pin this child
++	 * device so its autosuspend can never power off its GDSC behind
++	 * a core that no longer suspends (GDSC re-power does not re-boot
++	 * the firmware).
++	 */
++	if (venus_keep_powered)
++		pm_runtime_get_noresume(dev);
++
+ 	return 0;
+ 
+ err_vdev_release:
+@@ -1834,6 +1843,8 @@ static void vdec_remove(struct platform_device *pdev)
+ 	struct venus_core *core = dev_get_drvdata(pdev->dev.parent);
+ 
+ 	video_unregister_device(core->vdev_dec);
++	if (venus_keep_powered)
++		pm_runtime_put_noidle(core->dev_dec);
+ 	pm_runtime_disable(core->dev_dec);
+ 
+ 	if (core->pm_ops->vdec_put)
+@@ -1846,6 +1857,9 @@ static __maybe_unused int vdec_runtime_suspend(struct device *dev)
+ 	const struct venus_pm_ops *pm_ops = core->pm_ops;
+ 	int ret = 0;
+ 
++	if (venus_keep_powered)
++		return 0;
++
+ 	if (pm_ops->vdec_power)
+ 		ret = pm_ops->vdec_power(dev, POWER_OFF);
+ 
+@@ -1858,6 +1872,9 @@ static __maybe_unused int vdec_runtime_resume(struct device *dev)
+ 	const struct venus_pm_ops *pm_ops = core->pm_ops;
+ 	int ret = 0;
+ 
++	if (venus_keep_powered)
++		return 0;
++
+ 	if (pm_ops->vdec_power)
+ 		ret = pm_ops->vdec_power(dev, POWER_ON);
+ 
+diff --git a/drivers/media/platform/qcom/venus/venc.c b/drivers/media/platform/qcom/venus/venc.c
+index bf53267cb..d51f7aa3e 100644
+--- a/drivers/media/platform/qcom/venus/venc.c
++++ b/drivers/media/platform/qcom/venus/venc.c
+@@ -1598,6 +1598,15 @@ static int venc_probe(struct platform_device *pdev)
+ 	pm_runtime_use_autosuspend(dev);
+ 	pm_runtime_enable(dev);
+ 
++	/*
++	 * With keep_powered the core stays up for good; pin this child
++	 * device so its autosuspend can never power off its GDSC behind
++	 * a core that no longer suspends (GDSC re-power does not re-boot
++	 * the firmware).
++	 */
++	if (venus_keep_powered)
++		pm_runtime_get_noresume(dev);
++
+ 	return 0;
+ 
+ err_vdev_release:
+@@ -1610,6 +1619,8 @@ static void venc_remove(struct platform_device *pdev)
+ 	struct venus_core *core = dev_get_drvdata(pdev->dev.parent);
+ 
+ 	video_unregister_device(core->vdev_enc);
++	if (venus_keep_powered)
++		pm_runtime_put_noidle(core->dev_enc);
+ 	pm_runtime_disable(core->dev_enc);
+ 
+ 	if (core->pm_ops->venc_put)
+@@ -1622,6 +1633,9 @@ static __maybe_unused int venc_runtime_suspend(struct device *dev)
+ 	const struct venus_pm_ops *pm_ops = core->pm_ops;
+ 	int ret = 0;
+ 
++	if (venus_keep_powered)
++		return 0;
++
+ 	if (pm_ops->venc_power)
+ 		ret = pm_ops->venc_power(dev, POWER_OFF);
+ 
+@@ -1634,6 +1648,9 @@ static __maybe_unused int venc_runtime_resume(struct device *dev)
+ 	const struct venus_pm_ops *pm_ops = core->pm_ops;
+ 	int ret = 0;
+ 
++	if (venus_keep_powered)
++		return 0;
++
+ 	if (pm_ops->venc_power)
+ 		ret = pm_ops->venc_power(dev, POWER_ON);
+ 
+-- 
+2.43.0
+

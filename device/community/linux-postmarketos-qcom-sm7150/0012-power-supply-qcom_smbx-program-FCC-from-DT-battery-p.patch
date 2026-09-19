@@ -1,0 +1,128 @@
+From 2cc1fa0ed58ad3b2f1771e6cf03861dbe14d24d7 Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:17:18 +0800
+Subject: [PATCH 12/13] power: supply: qcom_smbx: program FCC from DT battery
+ profile
+
+The probe hardcoded FAST_CHARGE_CURRENT_CFG to 1950000 uA regardless of
+the DT battery profile, capping battery-side charging at 1.95A and
+making 27W (stock: 5.5A in the 15-45C JEITA window) unreachable. Read
+the value from the battery info instead, and expose
+POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT as a runtime knob (clamped to
+the DT ceiling) so userspace can lower it until proper JEITA handling
+lands in the driver.
+
+Also raise the phoenix battery profile to the stock 5.5A.
+---
+ .../boot/dts/qcom/sm7150-xiaomi-common.dtsi   | 12 ++++--
+ drivers/power/supply/qcom_smbx.c              | 40 +++++++++++++++----
+ 2 files changed, 41 insertions(+), 11 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi
+index 505b1da49..3db9f138f 100644
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi
+@@ -38,11 +38,15 @@ battery: battery {
+ 		device-chemistry = "lithium-ion-polymer";
+ 
+ 		/*
+-		 * Keep the maximum charging current conservative for now,
+-		 * until we have thermal handling in the charging driver.
+-		 * Downstream seems to have a upper limit of 3A.
++		 * Stock fast-charge profile for the G7BNVTBM4P_4500mAh
++		 * cell (stock DTB qcom,fastchg-current-ma) is 5.5A in the
++		 * 15-45C JEITA window, tapering to 880mA at <5C and
++		 * 2200mA at 45-58C. The charging driver has no JEITA
++		 * handling yet; this value is also the runtime ceiling of
++		 * POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT, so userspace
++		 * can clamp it when charging outside the window.
+ 		 */
+-		constant-charge-current-max-microamp = <1500000>;
++		constant-charge-current-max-microamp = <5500000>;
+ 
+ 		voltage-min-design-microvolt = <3400000>;
+ 		voltage-max-design-microvolt = <4400000>;
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index 2710b5a8f..9ef1bcfa9 100644
+--- a/drivers/power/supply/qcom_smbx.c
++++ b/drivers/power/supply/qcom_smbx.c
+@@ -334,6 +334,7 @@ static enum power_supply_property smb_properties[] = {
+ 	POWER_SUPPLY_PROP_CURRENT_MAX,
+ 	POWER_SUPPLY_PROP_CURRENT_NOW,
+ 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
++	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
+ 	POWER_SUPPLY_PROP_STATUS,
+ 	POWER_SUPPLY_PROP_HEALTH,
+ 	POWER_SUPPLY_PROP_ONLINE,
+@@ -998,6 +999,18 @@ static int smb_get_property(struct power_supply *psy,
+ 				val->intval *= 16;
+ 		}
+ 		return ret;
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT: {
++		unsigned int fcc_raw;
++
++		ret = regmap_read(chip->regmap,
++				  chip->base + FAST_CHARGE_CURRENT_CFG,
++				  &fcc_raw);
++		if (ret < 0)
++			return ret;
++		val->intval = (fcc_raw & FAST_CHARGE_CURRENT_SETTING_MASK) *
++			      chip->current_step_size_ua;
++		return 0;
++	}
+ 	case POWER_SUPPLY_PROP_ONLINE:
+ 		return smb_get_prop_usb_online(chip, &val->intval);
+ 	case POWER_SUPPLY_PROP_STATUS:
+@@ -1024,6 +1037,16 @@ static int smb_set_property(struct power_supply *psy,
+ 					  USBIN_SUSPEND_BIT, !val->intval);
+ 	case POWER_SUPPLY_PROP_CURRENT_MAX:
+ 		return smb_set_current_limit(chip, val->intval);
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT: {
++		unsigned int fcc_ua = val->intval;
++
++		if (fcc_ua > chip->batt_info->constant_charge_current_max_ua)
++			fcc_ua = chip->batt_info->constant_charge_current_max_ua;
++
++		return regmap_write(chip->regmap,
++				    chip->base + FAST_CHARGE_CURRENT_CFG,
++				    fcc_ua / chip->current_step_size_ua);
++	}
+ 	default:
+ 		dev_err(chip->dev, "No setter for property: %d\n", psp);
+ 		return -EINVAL;
+@@ -1036,6 +1059,7 @@ static int smb_property_is_writable(struct power_supply *psy,
+ 	switch (psp) {
+ 	case POWER_SUPPLY_PROP_STATUS:
+ 	case POWER_SUPPLY_PROP_CURRENT_MAX:
++	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+ 		return 1;
+ 	default:
+ 		return 0;
+@@ -1483,15 +1507,17 @@ static int smb_probe(struct platform_device *pdev)
+ 	platform_set_drvdata(pdev, chip);
+ 
+ 	/*
+-	 * This overrides all of the other current limits and is expected
+-	 * to be used for setting limits based on temperature. We set some
+-	 * relatively safe default value while still allowing a comfortably
+-	 * fast charging rate. Once temperature monitoring is hooked up we
+-	 * would expect this to be changed dynamically based on temperature
+-	 * reporting.
++	 * Program the battery-side fast charge current (FCC) from the DT
++	 * battery profile. This overrides all of the other current limits
++	 * and is expected to be adjusted dynamically based on temperature.
++	 * The driver has no JEITA handling yet: the stock profile lowers
++	 * FCC outside 15-45C, so until that is implemented userspace
++	 * should clamp POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT when
++	 * charging outside that window.
+ 	 */
+ 	rc = regmap_write(chip->regmap, chip->base + FAST_CHARGE_CURRENT_CFG,
+-			  1950000 / chip->current_step_size_ua);
++			  chip->batt_info->constant_charge_current_max_ua /
++			  chip->current_step_size_ua);
+ 	if (rc < 0)
+ 		return dev_err_probe(chip->dev, rc,
+ 				     "Couldn't write fast charge current cfg");
+-- 
+2.43.0
+

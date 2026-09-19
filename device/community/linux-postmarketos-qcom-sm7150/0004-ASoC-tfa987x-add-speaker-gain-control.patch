@@ -1,15 +1,14 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: OpenCode <opencode@localhost>
-Date: Mon, 25 Aug 2026 00:00:00 +0000
-Subject: [PATCH] ASoC: tfa987x: add speaker gain control
+From 639fb3ea48d26611c04cefd0f55791e4e6b8ba90 Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:16:52 +0800
+Subject: [PATCH 04/13] ASoC: tfa987x: add speaker gain control
 
-Expose the TDMSPKG bitfield (TDM_CFG8 reg 0x61, bits 9:6) as a
-"Speaker Driver Playback Volume" control: 6 dB base + 1 dB per step,
-matching the semantics used by the vendor driver for TFA9872/9874.
-
-On phoenix (TFA9874) the register is freely writeable after the soft
-reset done in probe, so a plain SOC_SINGLE_TLV is enough.
 ---
+ sound/soc/codecs/tfa9872.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/sound/soc/codecs/tfa9872.c b/sound/soc/codecs/tfa9872.c
+index 26bed4305..f7f8675bb 100644
 --- a/sound/soc/codecs/tfa9872.c
 +++ b/sound/soc/codecs/tfa9872.c
 @@ -10,6 +10,7 @@
@@ -20,7 +19,7 @@ reset done in probe, so a plain SOC_SINGLE_TLV is enough.
  
  #define TFA987X_SYS_CTRL0		0x00
  #define TFA987X_SYS_CTRL0_PWDN_MSK	BIT(0)
-@@ -109,11 +110,25 @@
+@@ -109,11 +110,25 @@ static const struct snd_soc_dapm_route tfa987x_dapm_routes[] = {
  	{"Speaker", NULL, "PWUP"},
  };
  
@@ -46,3 +45,6 @@ reset done in probe, so a plain SOC_SINGLE_TLV is enough.
  	.idle_bias_on		= 1,
  	.use_pmdown_time	= 1,
  	.endianness		= 1,
+-- 
+2.43.0
+

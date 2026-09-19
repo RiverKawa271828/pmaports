@@ -1,3 +1,18 @@
+From 84dca98ca1a3fbfa64e51a77f613716930ef3ef4 Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:17:18 +0800
+Subject: [PATCH 10/13] power: supply: qcom_smbx: SDP ICL/AICL handling and PD
+ voltage follow
+
+Legacy series consolidation: recharge-after-termination fix, AICL/ICL
+status handling, USB51 clearing for non-SDP, SMB5 status encoding,
+follow negotiated PD voltage, APSD rerun on ICL change.
+---
+ drivers/power/supply/qcom_smbx.c | 361 ++++++++++++++++++++++++++++++-
+ 1 file changed, 359 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/power/supply/qcom_smbx.c b/drivers/power/supply/qcom_smbx.c
+index 1d1d0416b..2710b5a8f 100644
 --- a/drivers/power/supply/qcom_smbx.c
 +++ b/drivers/power/supply/qcom_smbx.c
 @@ -20,6 +20,7 @@
@@ -8,7 +23,7 @@
  #include <linux/types.h>
  #include <linux/workqueue.h>
  
-@@ -125,6 +126,29 @@
+@@ -125,6 +126,29 @@ enum smb_generation {
  
  #define USBIN_CURRENT_LIMIT_CFG				0x370
  
@@ -38,7 +53,22 @@
  #define USBIN_AICL_OPTIONS_CFG				0x380
  #define SUSPEND_ON_COLLAPSE_USBIN_BIT			BIT(7)
  #define USBIN_AICL_START_AT_MAX_BIT			BIT(5)
-@@ -208,6 +232,9 @@
+@@ -141,7 +165,13 @@ enum smb_generation {
+ #define USBIN_CONT_AICL_THRESHOLD_CFG			0x384
+ #define USBIN_CONT_AICL_THRESHOLD_CFG_MASK		GENMASK(5, 0)
+ 
+-#define ICL_STATUS(smb)					(SMB_REG_OFFSET(smb) + 0x07)
++/* On SMB5 (PM8150B) the AICL-settled input current limit lives at +0x08;
++ * +0x07 holds the configured/instantaneous value which can read 0.
++ * SMB2 exposes a single ICL status register at +0x07. */
++#define SMB2_ICL_STATUS_REG				0x07
++#define SMB5_ICL_STATUS_REG				0x08
++#define ICL_STATUS(smb)					(SMB_REG_OFFSET(smb) + \
++			((smb)->gen == SMB5 ? SMB5_ICL_STATUS_REG : SMB2_ICL_STATUS_REG))
+ #define INPUT_CURRENT_LIMIT_MASK			GENMASK(7, 0)
+ 
+ #define POWER_PATH_STATUS(smb)				(SMB_REG_OFFSET(smb) + 0x0B)
+@@ -202,8 +232,19 @@ enum smb_generation {
  #define CDP_CURRENT_UA					1500000
  #define DCP_CURRENT_UA					1500000
  #define CURRENT_MAX_UA					DCP_CURRENT_UA
@@ -47,8 +77,43 @@
 +#define PD_POLL_INTERVAL_MS				5000
  /* clang-format on */
  
- /*
-@@ -282,6 +309,13 @@
++/*
++ * BATTERY_CHARGER_STATUS_1 encoding. NOTE: SMB5 (PM8150B/PM6150) uses a
++ * different encoding from SMB2, per the downstream smb5-reg.h:
++ *   0=INHIBIT 1=TRICKLE 2=PRE 3=FULLON 4=TAPER 5=TERMINATE
++ *   6=PAUSE   7=DISABLE
++ * The values below are the SMB2 encoding; smb_get_prop_status() translates
++ * for SMB5.
++ */
+ enum charger_status {
+ 	TRICKLE_CHARGE = 0,
+ 	PRE_CHARGE,
+@@ -215,6 +256,18 @@ enum charger_status {
+ 	DISABLE_CHARGE,
+ };
+ 
++/* SMB5 BATTERY_CHARGER_STATUS_1 decoding */
++enum smb5_charger_status {
++	SMB5_INHIBIT_CHARGE = 0,
++	SMB5_TRICKLE_CHARGE,
++	SMB5_PRE_CHARGE,
++	SMB5_FULLON_CHARGE,
++	SMB5_TAPER_CHARGE,
++	SMB5_TERMINATE_CHARGE,
++	SMB5_PAUSE_CHARGE,
++	SMB5_DISABLE_CHARGE,
++};
++
+ struct smb_init_register {
+ 	u16 addr;
+ 	u8 mask;
+@@ -251,11 +304,19 @@ struct smb_chip {
+ 	struct delayed_work status_change_work;
+ 	int cable_irq;
+ 	bool wakeup_enabled;
++	unsigned int apsd_reruns;
+ 
+ 	struct iio_channel *usb_in_i_chan;
  	struct iio_channel *usb_in_v_chan;
  
  	struct power_supply *chg_psy;
@@ -62,9 +127,99 @@
  };
  
  struct smb_match_data {
-@@ -646,6 +680,196 @@
+@@ -372,7 +433,7 @@ static int smbx_ov_status(struct smb_chip *chip)
+ 	if (rc)
+ 		return rc;
+ 
+-	return !!(reg & mask);
++	return !!(val & mask);
+ }
+ 
+ static int smb_get_prop_status(struct smb_chip *chip, int *val)
+@@ -407,6 +468,28 @@ static int smb_get_prop_status(struct smb_chip *chip, int *val)
+ 
+ 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
+ 
++	if (chip->gen == SMB5) {
++		switch (stat) {
++		case SMB5_TRICKLE_CHARGE:
++		case SMB5_PRE_CHARGE:
++		case SMB5_FULLON_CHARGE:
++		case SMB5_TAPER_CHARGE:
++			*val = POWER_SUPPLY_STATUS_CHARGING;
++			return rc;
++		case SMB5_DISABLE_CHARGE:
++		case SMB5_PAUSE_CHARGE:
++			*val = POWER_SUPPLY_STATUS_NOT_CHARGING;
++			return rc;
++		case SMB5_TERMINATE_CHARGE:
++		case SMB5_INHIBIT_CHARGE:
++			*val = POWER_SUPPLY_STATUS_FULL;
++			return rc;
++		default:
++			*val = POWER_SUPPLY_STATUS_UNKNOWN;
++			return rc;
++		}
++	}
++
+ 	switch (stat) {
+ 	case TRICKLE_CHARGE:
+ 	case PRE_CHARGE:
+@@ -508,6 +591,7 @@ static int smb_set_current_limit(struct smb_chip *chip, unsigned int val)
+ static void smb_status_change_work(struct work_struct *work)
+ {
+ 	unsigned int charger_type, current_ua;
++	unsigned int stat;
+ 	int usb_online = 0;
+ 	int count, rc;
+ 	struct smb_chip *chip;
+@@ -553,8 +637,240 @@ static void smb_status_change_work(struct work_struct *work)
+ 		break;
  	}
  
++	/*
++	 * USBIN_ICL_OPTIONS.USB51_MODE caps the input current at 500mA
++	 * (USB 2.0 mode). It is valid for SDP only; leave it set for
++	 * CDP/DCP and the programmed ICL below gets silently clamped to
++	 * 500mA, leaving zero net charge current -- observed on PM6150
++	 * (phoenix): DCP chargers latched INHIBIT_CHARGE / STATUS=Full
++	 * forever while the battery drained.
++	 */
++	regmap_update_bits(chip->regmap, chip->base + USBIN_ICL_OPTIONS,
++			   USB51_MODE_BIT,
++			   charger_type == POWER_SUPPLY_USB_TYPE_SDP ?
++			   USB51_MODE_BIT : 0);
++
+ 	smb_set_current_limit(chip, current_ua);
++
++	/*
++	 * If the charger is in terminate/inhibit state from an earlier
++	 * charge cycle, the hardware only restarts charging once the
++	 * recharge threshold is crossed again. Devices whose fuel gauge
++	 * data is uncalibrated may never report a stable SOC, leaving the
++	 * input current limit at 0 and the battery draining while the
++	 * charger reports "Full". Kick a fresh charge cycle whenever we
++	 * (re)detect a charger in such a state.
++	 */
++	rc = regmap_read(chip->regmap,
++			 chip->base + BATTERY_CHARGER_STATUS_1, &stat);
++	if (rc >= 0) {
++		stat &= BATTERY_CHARGER_STATUS_MASK;
++		if (stat == TERMINATE_CHARGE || stat == INHIBIT_CHARGE) {
++			dev_dbg(chip->dev,
++				"charge terminated, forcing recharge\n");
++			regmap_update_bits(chip->regmap,
++					   chip->base + USBIN_CMD_IL,
++					   USBIN_SUSPEND_BIT, 0);
++			regmap_write(chip->regmap,
++				     chip->base + CHARGING_ENABLE_CMD, 0);
++			usleep_range(1000, 2000);
++			regmap_write(chip->regmap,
++				     chip->base + CHARGING_ENABLE_CMD,
++				     CHARGING_ENABLE_CMD_BIT);
++		}
++	}
++
  	power_supply_changed(chip->chg_psy);
 +
 +	/*
@@ -259,7 +414,39 @@
  }
  
  static int smb_get_iio_chan(struct smb_chip *chip, struct iio_channel *chan,
-@@ -1259,6 +1483,29 @@
+@@ -743,6 +1059,8 @@ static irqreturn_t smb_handle_usb_plugin(int irq, void *data)
+ {
+ 	struct smb_chip *chip = data;
+ 
++	chip->apsd_reruns = 0;
++
+ 	power_supply_changed(chip->chg_psy);
+ 
+ 	schedule_delayed_work(&chip->status_change_work,
+@@ -757,6 +1075,22 @@ static irqreturn_t smb_handle_usb_icl_change(int irq, void *data)
+ 
+ 	power_supply_changed(chip->chg_psy);
+ 
++	/*
++	 * An ICL change usually means AICL re-settled because the input
++	 * source buckled under the previously programmed limit -- the
++	 * signature of a misclassified port (e.g. an SDP port running
++	 * with the DCP limit, which drains the battery instead of
++	 * charging).  Force a fresh APSD run and re-evaluate the type,
++	 * bounded so the detection current steps cannot ping-pong us.
++	 */
++	if (chip->apsd_reruns < 3) {
++		chip->apsd_reruns++;
++		regmap_write(chip->regmap, chip->base + CMD_APSD,
++			     APSD_RERUN_BIT);
++		schedule_delayed_work(&chip->status_change_work,
++				      msecs_to_jiffies(300));
++	}
++
+ 	return IRQ_HANDLED;
+ }
+ 
+@@ -1168,6 +1502,29 @@ static int smb_probe(struct platform_device *pdev)
  		return dev_err_probe(chip->dev, rc,
  				     "Couldn't write fast AICL rerun time");
  
@@ -289,3 +476,6 @@
  	/* Initialise charger state */
  	schedule_delayed_work(&chip->status_change_work, 0);
  
+-- 
+2.43.0
+

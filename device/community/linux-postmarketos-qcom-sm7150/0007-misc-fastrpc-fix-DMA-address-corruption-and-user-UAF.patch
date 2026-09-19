@@ -1,65 +1,15 @@
-From e85eb5feca8e254905ffa6c57a3c99c89a674a0f Mon Sep 17 00:00:00 2001
-From: Anandu Krishnan E <anandu.e@oss.qualcomm.com>
-Date: Sat, 30 May 2026 21:45:25 +0100
-Subject: misc: fastrpc: fix use-after-free of fastrpc_user in workqueue
- context
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+From 54e23680e8a607eee9e042c71c36225ed2fb2495 Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:16:52 +0800
+Subject: [PATCH 07/13] misc: fastrpc: fix DMA address corruption and user UAF
+ in workqueue
 
-There is a race between fastrpc_device_release() and the workqueue
-that processes DSP responses. When the user closes the file descriptor,
-fastrpc_device_release() frees the fastrpc_user structure. Concurrently,
-an in-flight DSP invocation can complete and fastrpc_rpmsg_callback()
-schedules context cleanup via schedule_work(&ctx->put_work). If the
-workqueue runs fastrpc_context_free() in parallel with or after
-fastrpc_device_release() has freed the user structure, it dereferences
-the freed fastrpc_user. Depending on the state of the context at the
-time of the race, any one of the following accesses can be hit:
-
- 1. fastrpc_buf_free() calls fastrpc_ipa_to_dma_addr(buf->fl->cctx, ...)
-    to strip the SID bits from the stored IOVA before passing the
-    physical address to dma_free_coherent().
-
- 2. fastrpc_free_map() reads map->fl->cctx->vmperms[0].vmid to
-    reconstruct the source permission bitmask needed for the
-    qcom_scm_assign_mem() call that returns memory from the DSP VM
-    back to HLOS.
-
- 3. fastrpc_free_map() acquires map->fl->lock to safely remove the
-    map node from the fl->maps list.
-
-The resulting use-after-free manifests as:
-
-  pc : fastrpc_buf_free+0x38/0x80 [fastrpc]
-  lr : fastrpc_context_free+0xa8/0x1b0 [fastrpc]
-  fastrpc_context_free+0xa8/0x1b0 [fastrpc]
-  fastrpc_context_put_wq+0x78/0xa0 [fastrpc]
-  process_one_work+0x180/0x450
-  worker_thread+0x26c/0x388
-
-Add kref-based reference counting to fastrpc_user. Have each invoke
-context take a reference on the user at allocation time and release it
-when the context is freed. Release the initial reference in
-fastrpc_device_release() at file close. Move the teardown of the user
-structure — freeing pending contexts, maps, mmaps, and the channel
-context reference — into the kref release callback fastrpc_user_free(),
-so that it runs only when the last reference is dropped, regardless of
-whether that happens at device close or after the final in-flight
-context completes.
-
-Fixes: 6cffd79504ce ("misc: fastrpc: Add support for dmabuf exporter")
-Cc: stable@kernel.org
-Signed-off-by: Anandu Krishnan E <anandu.e@oss.qualcomm.com>
-Signed-off-by: Srinivas Kandagatla <srini@kernel.org>
-Link: https://patch.msgid.link/20260530204528.116920-2-srini@kernel.org
-Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 ---
- drivers/misc/fastrpc.c | 75 ++++++++++++++++++++++++++++++++++----------------
- 1 file changed, 52 insertions(+), 23 deletions(-)
+ drivers/misc/fastrpc.c | 77 +++++++++++++++++++++++++++++-------------
+ 1 file changed, 53 insertions(+), 24 deletions(-)
 
 diff --git a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
-index 1080f9acf70a3..48f8262af5391 100644
+index 1080f9acf..6c34c3332 100644
 --- a/drivers/misc/fastrpc.c
 +++ b/drivers/misc/fastrpc.c
 @@ -310,6 +310,8 @@ struct fastrpc_user {
@@ -147,7 +97,7 @@ index 1080f9acf70a3..48f8262af5391 100644
  
  	ctx->sc = sc;
  	ctx->retval = -1;
-@@ -658,6 +706,7 @@ err_idr:
+@@ -658,6 +706,7 @@ static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
  	spin_lock(&user->lock);
  	list_del(&ctx->node);
  	spin_unlock(&user->lock);
@@ -155,6 +105,15 @@ index 1080f9acf70a3..48f8262af5391 100644
  	fastrpc_channel_ctx_put(cctx);
  	kfree(ctx->maps);
  	kfree(ctx->olaps);
+@@ -1042,7 +1091,7 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
+ 
+ 			mmap_read_lock(current->mm);
+ 			vma = find_vma(current->mm, ctx->args[i].ptr);
+-			if (vma)
++			if (vma && ctx->args[i].ptr >= vma->vm_start)
+ 				pages[i].addr += (ctx->args[i].ptr & PAGE_MASK) -
+ 						 vma->vm_start;
+ 			mmap_read_unlock(current->mm);
 @@ -1579,9 +1628,6 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
  {
  	struct fastrpc_user *fl = (struct fastrpc_user *)file->private_data;
@@ -205,5 +164,5 @@ index 1080f9acf70a3..48f8262af5391 100644
  	return 0;
  }
 -- 
-cgit 1.3.1-korg
+2.43.0
 

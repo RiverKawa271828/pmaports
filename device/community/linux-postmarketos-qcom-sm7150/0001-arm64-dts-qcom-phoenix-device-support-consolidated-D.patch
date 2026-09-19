@@ -1,0 +1,796 @@
+From e74d768032fe29293c75db304b21ef69a98c4e84 Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:16:51 +0800
+Subject: [PATCH 01/13] arm64: dts: qcom: phoenix device support (consolidated
+ DTS)
+
+Base phoenix device tree plus typec/PD sink PDOs (5V/3A + 5-9V/3A, 27W op),
+audio q6asm/tfa987x nodes, 1MiB ramoops @0xbff00000 (ECC), venus enable,
+OV8856 camera nodes, pm6150 qgauge batt-id/sram, battery profile
+(G7BNVTBM4P 4500mAh, FV 4.4V, conservative FCC 1.5A).
+---
+ arch/arm64/boot/dts/qcom/Makefile             |   1 +
+ arch/arm64/boot/dts/qcom/pm6150.dtsi          |  24 +-
+ .../boot/dts/qcom/sm7150-xiaomi-common.dtsi   |  10 +-
+ .../qcom/sm7150-xiaomi-phoenix-battery.dtsi   |  65 ++
+ .../boot/dts/qcom/sm7150-xiaomi-phoenix.dts   | 573 ++++++++++++++++++
+ arch/arm64/boot/dts/qcom/sm7150.dtsi          |   4 +-
+ 6 files changed, 662 insertions(+), 15 deletions(-)
+ create mode 100644 arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix-battery.dtsi
+ create mode 100644 arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+
+diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
+index 488890a97..94fbb83ff 100644
+--- a/arch/arm64/boot/dts/qcom/Makefile
++++ b/arch/arm64/boot/dts/qcom/Makefile
+@@ -342,6 +342,7 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm7125-xiaomi-joyeuse.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm7150-google-sunfish.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm7150-xiaomi-davinci-samsung.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm7150-xiaomi-davinci-visionox.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= sm7150-xiaomi-phoenix.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm7150-xiaomi-surya-huaxing.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm7150-xiaomi-surya-tianma.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm7150-xiaomi-sweet.dtb
+diff --git a/arch/arm64/boot/dts/qcom/pm6150.dtsi b/arch/arm64/boot/dts/qcom/pm6150.dtsi
+index efd81c7dc..2a344ad97 100644
+--- a/arch/arm64/boot/dts/qcom/pm6150.dtsi
++++ b/arch/arm64/boot/dts/qcom/pm6150.dtsi
+@@ -168,6 +168,14 @@ bat_therm@4a {
+ 				qcom,hw-settle-time = <200>;
+ 				qcom,pre-scaling = <1 1>;
+ 			};
++
++			bat_id@4b {
++				reg = <ADC5_BAT_ID_100K_PU>;
++				label = "bat_id";
++				qcom,ratiometric;
++				qcom,hw-settle-time = <200>;
++				qcom,pre-scaling = <1 1>;
++			};
+ 		};
+ 
+ 		pm6150_adc_tm: adc-tm@3500 {
+@@ -184,10 +192,10 @@ pm6150_qgauge: qgauge@4800 {
+ 			compatible = "qcom,pm6150-qg";
+ 			reg = <0x4800>;
+ 
+-			io-channels = <&pm6150_adc ADC5_BAT_THERM_100K_PU>;
+-			io-channel-names = "batt-therm";
+-
+-			nvmem = <&pm6150_qg_sdam>;
++			io-channels = <&pm6150_adc ADC5_BAT_THERM_100K_PU>,
++				      <&pm6150_adc ADC5_BAT_ID_100K_PU>;
++			io-channel-names = "batt-therm",
++					   "batt-id";
+ 
+ 			status = "disabled";
+ 		};
+@@ -200,14 +208,6 @@ pm6150_rtc: rtc@6000 {
+ 			status = "disabled";
+ 		};
+ 
+-		pm6150_qg_sdam: nvram@b600 {
+-			compatible = "qcom,spmi-sdam";
+-			reg = <0xb600>;
+-			#address-cells = <1>;
+-			#size-cells = <1>;
+-			ranges = <0 0xb600 0x100>;
+-		};
+-
+ 		pm6150_gpios: gpio@c000 {
+ 			compatible = "qcom,pm6150-gpio", "qcom,spmi-gpio";
+ 			reg = <0xc000>;
+diff --git a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi
+index 3209faf98..505b1da49 100644
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi
+@@ -601,12 +601,17 @@ &pm6150_typec {
+ 	connector {
+ 		compatible = "usb-c-connector";
+ 
+-		power-role = "source";
++		power-role = "dual";
+ 		data-role = "dual";
++		try-power-role = "sink";
+ 		self-powered;
+ 
+ 		source-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_DUAL_ROLE |
+ 			       PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
++		sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_DUAL_ROLE |
++			     PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)
++			     PDO_VAR(5000, 9000, 3000)>;
++		op-sink-microwatt = <27000000>;
+ 
+ 		ports {
+ 			#address-cells = <1>;
+@@ -802,7 +807,7 @@ cts-pins {
+ 			pins = "gpio38";
+ 			function = "gpio";
+ 			drive-strength = <2>;
+-			bias-bus-hold;
++			bias-pull-up;
+ 		};
+ 
+ 		rts-pins {
+@@ -971,5 +976,6 @@ &wifi {
+ 	vdd-3.3-ch0-supply = <&vreg_pmu_ch0>;
+ 	vdd-3.3-ch1-supply = <&vreg_pmu_ch1>;
+ 
++	qcom,snoc-host-cap-8bit-quirk;
+ 	status = "okay";
+ };
+diff --git a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix-battery.dtsi b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix-battery.dtsi
+new file mode 100644
+index 000000000..4d28a42a3
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix-battery.dtsi
+@@ -0,0 +1,65 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Stock battery profile for Xiaomi POCO X2 (phoenix), battery
++ * G7BNVTBM4P_4500mAh (BAT_ID ~100 kOhm).  Values extracted from the
++ * stock dtbo (fdt-05) pc-temp-v2-lut; stock stores OCV in units of
++ * 100 uV, converted to uV here.  Rows = SOC * 100 (descending),
++ * columns = temperature degC (ascending).  Consumed by qcom_qg to
++ * estimate capacity from open-circuit voltage like stock does.
++ */
++
++&pm6150_qgauge {
++	/* Stock battery profile LUT (G7BNVTBM4P_4500mAh, extracted from
++	 * stock dtbo fdt-05; OCV uV indexed by SOC x100 rows x temp degC cols).
++	 * Replaces the voltage-linear capacity estimate. */
++	qcom,ocv-temp-legend = <(-10) 0 10 25 40 50>;
++	qcom,ocv-soc-legend = <						10000 9800 9600 9400 9200 9000 8800 8600
++						8400 8200 8000 7800 7600 7400 7200 7000
++						6800 6600 6400 6200 6000 5800 5600 5400
++						5200 5000 4800 4600 4400 4200 4000 3800
++						3600 3400 3200 3000 2800 2600 2400 2200
++						2000 1800 1600 1400 1200 1000 900 800
++						700 600 500 400 300 200 100 0>;
++	qcom,ocv-lut-data = <						4387500 4385000 4383000 4381500 4376500 4375000 4355000 4353500
++						4355600 4355700 4351100 4349500 4324600 4323900 4329200 4330500
++						4326300 4324700 4296800 4296600 4303700 4306000 4302200 4300600
++						4271400 4271500 4279300 4282300 4278900 4277500 4246900 4247000
++						4255200 4258700 4255700 4254400 4222700 4222500 4231400 4235200
++						4232300 4231100 4199100 4198400 4207800 4211800 4208900 4207800
++						4175900 4174600 4184700 4188800 4186000 4184900 4153000 4150700
++						4162000 4166200 4163300 4162200 4131200 4128500 4139800 4143800
++						4140900 4139800 4112100 4109300 4118600 4121700 4118900 4117800
++						4093800 4091200 4097800 4099900 4097300 4096300 4072400 4070400
++						4077100 4079300 4076600 4075600 4047300 4046900 4056500 4059600
++						4056700 4055300 4020500 4023300 4036100 4040000 4037200 4035900
++						3990300 4000700 4016000 4019400 4017800 4017300 3959900 3978800
++						3996300 3999300 3999100 3999400 3938700 3958300 3977100 3982200
++						3982100 3982500 3923900 3939000 3958500 3967800 3967300 3967000
++						3910100 3920200 3939100 3951200 3950500 3949700 3895300 3900800
++						3916700 3927100 3927000 3926600 3880500 3882000 3894200 3901300
++						3901800 3901900 3865400 3866300 3876700 3882200 3882900 3883200
++						3849400 3852800 3862400 3866700 3867800 3868100 3835800 3840500
++						3849800 3853600 3854900 3855200 3826400 3828100 3838500 3842300
++						3843600 3843800 3818800 3816900 3828400 3832400 3833600 3833700
++						3811900 3808900 3819200 3823400 3824400 3824400 3805600 3803000
++						3810700 3815100 3815900 3815700 3800000 3798100 3803100 3807500
++						3808200 3807900 3794900 3793600 3795700 3800300 3801400 3801100
++						3790100 3789500 3789200 3793700 3795100 3794700 3785400 3785900
++						3784600 3787600 3788600 3787900 3780800 3782900 3781400 3782200
++						3782200 3780900 3776200 3779500 3777900 3776500 3774900 3772800
++						3771300 3775100 3774000 3770200 3765500 3761900 3766200 3769700
++						3769600 3763400 3755200 3750000 3760400 3763700 3763800 3756100
++						3746400 3740700 3754000 3756800 3756300 3748300 3738700 3733200
++						3746600 3748700 3747400 3739600 3730600 3725200 3736900 3738100
++						3736600 3729800 3721700 3716000 3725500 3725300 3724100 3718600
++						3711400 3705300 3714300 3710300 3709400 3704700 3697200 3691300
++						3704400 3696300 3696300 3692800 3686200 3680100 3696300 3687000
++						3689000 3687100 3681600 3676100 3692500 3683500 3686600 3686000
++						3680300 3675300 3688500 3680200 3684400 3684000 3679000 3673900
++						3683700 3675500 3680800 3681300 3676800 3671100 3676200 3667400
++						3673300 3673600 3669000 3661900 3657700 3647500 3651000 3646300
++						3639700 3628900 3618200 3606500 3601600 3595300 3590500 3579000
++						3558200 3545800 3536400 3530000 3526800 3513900 3473200 3460700
++						3447900 3439300 3439400 3426100 3336500 3321900 3312300 3305400
++						3308100 3292200 2858300 2857000 2811400 2812000 2877100 2859700>;
++};
+diff --git a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+new file mode 100644
+index 000000000..e13128e03
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
+@@ -0,0 +1,573 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Copyright (c) 2024, Danila Tikhonov <danila@jiaxyga.com>
++ */
++
++/dts-v1/;
++
++#include "sm7150-xiaomi-common.dtsi"
++#include "sm7150-xiaomi-phoenix-battery.dtsi"
++
++/delete-node/ &adsp_mem;
++/delete-node/ &wlan_msa_mem;
++/delete-node/ &npu_mem;
++/delete-node/ &ipa_fw_mem;
++/delete-node/ &ipa_gsi_mem;
++/delete-node/ &gpu_mem;
++/delete-node/ &tz_mem;
++
++/ {
++	/*
++	 * Xiaomi POCO X2
++	 * Xiaomi Redmi K30 4G
++	 */
++	model = "Xiaomi POCO X2";
++	compatible = "xiaomi,phoenix", "qcom,sm7150";
++
++	qcom,board-id = <43 0>;
++
++	reserved-memory {
++		tz_mem: trust-zone@86200000 {
++			reg = <0x0 0x86200000 0x0 0x4900000>;
++			no-map;
++		};
++
++		adsp_mem: adsp@95700000 {
++			reg = <0x0 0x95700000 0x0 0x2600000>;
++			no-map;
++		};
++
++		wlan_msa_mem: wlan_msa@97d00000 {
++			reg = <0x0 0x97d00000 0x0 0x180000>;
++			no-map;
++		};
++
++		npu_mem: npu@97e80000 {
++			reg = <0x0 0x97e80000 0x0 0x80000>;
++			no-map;
++		};
++
++		ipa_fw_mem: ipa_fw@97f00000 {
++			reg = <0x0 0x97f00000 0x0 0x10000>;
++			no-map;
++		};
++
++		ipa_gsi_mem: ipa_gsi@97f10000 {
++			reg = <0x0 0x97f10000 0x0 0x5000>;
++			no-map;
++		};
++
++		gpu_mem: gpu@97f15000 {
++			reg = <0x0 0x97f15000 0x0 0x2000>;
++			no-map;
++		};
++
++		rmtfs_mem: rmtfs@f2e01000 {
++			compatible = "qcom,rmtfs-mem";
++			reg = <0 0xf2e01000 0 0x200000>;
++			no-map;
++
++			qcom,client-id = <1>;
++			qcom,vmid = <QCOM_SCM_VMID_MSS_MSA>;
++		};
++
++		ramoops_mem: ramoops@bff00000 {
++			compatible = "ramoops";
++			reg = <0x0 0xbff00000 0x0 0x100000>;
++			record-size = <0x20000>;
++			console-size = <0x40000>;
++			pmsg-size = <0x20000>;
++			ecc-size = <16>;
++			no-map;
++		};
++	};
++};
++
++&gpu {
++	zap-shader {
++		/* Split MDT firmware (mdt + b00/b01/b02) straight from the
++		 * stock vendor partition - matches how Android kgsl loads it,
++		 * so TrustZone accepts the PAS metadata. */
++		firmware-name = "qcom/sm7150/phoenix/a615_zap.mbn";
++	};
++};
++
++&q6asmdai {
++	/* Declare the frontend used by the Phoenix multimedia sound card. */
++	dai@0 {
++		reg = <MSM_FRONTEND_DAI_MULTIMEDIA1>;
++	};
++};
++
++&ipa {
++	firmware-name = "qcom/sm7150/phoenix/ipa_fws.mbn";
++};
++
++&lpass_tlmm {
++	gpio-line-names = "SWR_TX_CLK", /* GPIO_0 */
++			  "SWR_TX_DATA1",
++			  "SWR_TX_DATA2",
++			  "SWR_RX_CLK",
++			  "SWR_RX_DATA1",
++			  "SWR_RX_DATA2",
++			  "WCD9375_RST_N",
++			  "NC",
++			  "NC",
++			  "NC",
++			  "NC", /* GPIO_10 */
++			  "NC",
++			  "BT_FM_SLIMBUS_DATA",
++			  "BT_FM_SLIMBUS_CLK";
++};
++
++&nfc_default {
++	pins = "gpio31", "gpio36", "gpio67";
++};
++
++&nfc_sleep {
++	pins = "gpio31", "gpio36", "gpio67";
++};
++
++&nxp {
++	enable-gpios = <&tlmm 67 GPIO_ACTIVE_HIGH>;
++};
++
++&battery {
++	/* POCO X2 / Redmi K30 4G is rated at 4500 mAh typical. */
++	charge-full-design-microamp-hours = <4500000>;
++};
++
++&panel {
++	backlight = <&pm6150l_wled>;
++	compatible = "mdss,g7b-37-02-0a-dsc";
++};
++
++&pm6150_vib {
++	status = "okay";
++	/* Use the dedicated LDO vibrator driver instead of the pmi632
++	 * compat layer in pm8xxx-vibrator; stock setpoint is 3.0 V.
++	 */
++	compatible = "qcom,qpnp-vibrator-ldo";
++	qcom,vib-ldo-volt-uv = <3000000>;
++};
++
++&pm6150_gpios {
++	gpio-line-names = "NC", /* GPIO_1 */
++			  "NC",
++			  "SMB_STAT",
++			  "NC",
++			  "NC",
++			  "NC",
++			  "WCSS_PWR_REQ",
++			  "CAMF2_MCLK",
++			  "FORCED_USB_BOOT",
++			  "NC";  /* GPIO_10 */
++};
++
++&pm6150l_gpios {
++	gpio-line-names = "CAMW_DVDD_EN", /* GPIO_1 */
++			  "KYPD_VOLP_N",
++			  "CAMU_AVDD_EN",
++			  "CAMM_AVDD_EN",
++			  "NC",
++			  "NC",
++			  "NC",
++			  "CAMW_AVDD_EN",
++			  "LCD_RESET_N",
++			  "INFARED_SPI_MOSI", /* GPIO_10 */
++			  "NC",
++			  "NC";
++};
++
++&pm6150l_lpg {
++	status = "okay";
++};
++
++&pm6150l_wled {
++	qcom,current-limit-microamp = <22500>;
++	qcom,ovp-millivolt = <28000>;
++
++	status = "okay";
++};
++
++&remoteproc_adsp {
++	firmware-name = "qcom/sm7150/phoenix/adsp.mbn";
++};
++
++&remoteproc_cdsp {
++	firmware-name = "qcom/sm7150/phoenix/cdsp.mbn";
++};
++
++&remoteproc_mpss {
++	firmware-name = "qcom/sm7150/phoenix/modem.mbn";
++};
++
++&sdhc_2 {
++	status = "okay";
++};
++
++&spi4 {
++	clock-frequency = <5000000>;
++	status = "okay";
++
++	nt36xxx: ts_novatek@0 {
++		compatible = "novatek,nt36xxx-spi";
++		reg = <0>;
++
++		spi-max-frequency = <5000000>;
++
++		pinctrl-0 = <&ts_int_active &ts_reset_active>;
++		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
++		pinctrl-names = "default", "sleep";
++
++		reset-gpio = <&tlmm 8 GPIO_ACTIVE_HIGH>;
++		irq-gpio = <&tlmm 9 IRQ_TYPE_EDGE_FALLING>;
++
++		panel = <&panel>;
++		firmware-name = "novatek_nt36672c_g7b_fw01.bin";
++	};
++};
++
++&tlmm {
++	gpio-line-names = "NFC_ESE_SPI_MISO", /* GPIO_0 */
++			  "NFC_ESE_SPI_MOSI",
++			  "NFC_ESE_SPI_CLK",
++			  "NFC_ESE_SPI_CS_N",
++			  "CAM_DOVDD_EN",
++			  "NC",
++			  "SPKR_I2C_SDA",
++			  "SPKR_I2C_SCL",
++			  "TP_RESET_N",
++			  "TP_INT_N",
++			  "MDP_VSYNC_P", /* GPIO_10 */
++			  "CAMF2_MCLK_EN",
++			  "FRONT2_I2C_SEL",
++			  "CAMF1_MCLK0",
++			  "CAMW_MCLK1",
++			  "CAMUM_MCLK2",
++			  "CAMD_MCLK3",
++			  "CCI_I2C_SDA0",
++			  "CCI_I2C_SCL0",
++			  "CCI_I2C_SDA1",
++			  "CCI_I2C_SCL1", /* GPIO_20 */
++			  "CAMD_RSTN",
++			  "FL_STROBE_TRIG",
++			  "CAMF1_RSTN",
++			  "CAMM_RSTN",
++			  "CAMU_RSTN",
++			  "CAMW_RSTN",
++			  "CCI_I2C_SDA2",
++			  "CCI_I2C_SCL2",
++			  "CAMU_DVDD_EN",
++			  "CAMF2_RSTN",  /* GPIO_30 */
++			  "NFC_LABBCLK3_EN",
++			  "ERR_INT_N",
++			  "LCD_ID_DET1",
++			  "NFC_I2C_SDA",
++			  "NFC_I2C_SCL",
++			  "NFC_DWL_REQ",
++			  "NFC_IRQ",
++			  "BT_UART_CTS",
++			  "BT_UART_RFR",
++			  "BT_UART_TX", /* GPIO_40 */
++			  "BT_UART_RX",
++			  "NC",
++			  "INFARED_SPI_MOSI",
++			  "BLSP2_UART_TX",
++			  "BLSP2_UART_RX",
++			  "APPS_I2C_SDA",
++			  "APPS_I2C_SCL",
++			  "FORCED_USB_BOOT",
++			  "SPKR_I2S_BCK",
++			  "SPKR_I2S_WS", /* GPIO_50 */
++			  "SPKR_I2S_DOUT",
++			  "SPKR_I2S_DIN1",
++			  "TP_SPI_MISO",
++			  "TP_SPI_MOSI",
++			  "TP_SPI_CLK",
++			  "TP_SPI_CS",
++			  "FP_INT_N",
++			  "FP_RESET_N",
++			  "FP_SPI_MISO",
++			  "FP_SPI_MOSI", /* GPIO_60 */
++			  "FP_SPI_CLK",
++			  "FP_SPI_CS_N",
++			  "FP_LDO_EN",
++			  "CAMF2_TEST_INT",
++			  "LCD_ID_DET2",
++			  "SPKR_PA_RST",
++			  "NFC_ENABLE",
++			  "VBUS_DIS_EN",
++			  "SD_CARD_DET_N",
++			  "NC", /* GPIO_70 */
++			  "NC",
++			  "CAMF1_DVDD_AVDD_EN",
++			  "WLAN_SW_CTRL",
++			  "GRFC_4",
++			  "UIM2_DATA",
++			  "UIM2_CLK",
++			  "UIM2_RESET",
++			  "UIM2_PRESENT",
++			  "UIM1_DATA",
++			  "UIM1_CLK", /* GPIO_80 */
++			  "UIM1_RESET",
++			  "UIM1_PRESENT",
++			  "NC",
++			  "NC",
++			  "WMSS_RESET_N",
++			  "ACCEL_INT",
++			  "GYRO_INT",
++			  "MIPI_SEL",
++			  "ALS_INT_N",
++			  "PS_INT_N", /* GPIO_90 */
++			  "SW_IO",
++			  "RFFE4_CLK",
++			  "SPKR_INT",
++			  "CAMF2_INT",
++			  "GRFC_3",
++			  "QLINK_REQUEST",
++			  "QLINK_ENABLE",
++			  "GRFC_2",
++			  "GRFC_0",
++			  "GRFC_1", /* GPIO_100 */
++			  "RFFE3_DATA",
++			  "RFFE3_CLK",
++			  "RFFE4_DATA",
++			  "USB_PHY_PS",
++			  "RFFE5_DATA",
++			  "RFFE5_CLK",
++			  "GRFC_5",
++			  "WLAN_COEX_UART_TXD",
++			  "WLAN_COEX_UART_RXD",
++			  "NC", /* GPIO_110 */
++			  "NC",
++			  "RFFE1_DATA",
++			  "RFFE1_CLK";
++};
++
++&venus {
++	status = "okay";
++
++	/* Firmware split MDT straight from stock vendor partition, already
++	 * shipped in firmware-xiaomi-phoenix. */
++	firmware-name = "qcom/sm7150/phoenix/venus.mbn";
++};
++
++&pm6150_qgauge {
++	/* Let the gauge know who charges it: power_supply_am_i_supplied()
++	 * and _get_property_from_supplier() need this link to report
++	 * charging status instead of Unknown.
++	 */
++	power-supplies = <&pm6150_charger>;
++	manufacturer = "Xiaomi";
++};
++
++/ {
++	sound {
++		compatible = "qcom,sm8250-sndcard";
++		model = "Xiaomi POCO X2";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pri_mi2s_active &pri_mi2s_ws_active>;
++
++		mm1-dai-link {
++			link-name = "MultiMedia1";
++			cpu {
++				sound-dai = <&q6asmdai MSM_FRONTEND_DAI_MULTIMEDIA1>;
++			};
++		};
++
++		speaker_playback_dai {
++			link-name = "Primary Spkr Playback";
++			cpu {
++				sound-dai = <&q6afedai PRIMARY_MI2S_RX>;
++			};
++
++			platform {
++				sound-dai = <&q6routing>;
++			};
++
++			codec {
++				sound-dai = <&tfa9874>;
++			};
++		};
++	};
++};
++
++&i2c7 {
++	clock-frequency = <100000>;
++	status = "okay";
++
++	tfa9874: audio-codec@34 {
++		compatible = "nxp,tfa9874";
++		reg = <0x34>;
++
++		reset-gpios = <&tlmm 66 GPIO_ACTIVE_HIGH>;
++		irq-gpios = <&tlmm 93 GPIO_ACTIVE_HIGH>;
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&spkr_rst_default &spkr_int_default>;
++
++		#sound-dai-cells = <0>;
++	};
++};
++
++&tlmm {
++	spkr_rst_default: spkr-rst-default-state {
++		pins = "gpio66";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++		output-low;
++	};
++
++	spkr_int_default: spkr-int-default-state {
++		pins = "gpio93";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++		input-enable;
++	};
++};
++&q6afedai {
++	/* stock wiring: PRI_MI2S_RX playback data on SD0 (gpio52) */
++	qi2s@16 {
++		reg = <PRIMARY_MI2S_RX>;
++		qcom,sd-lines = <0>;
++	};
++};
++
++/*
++ * Rear ultrawide camera (OV8856 8MP, I2C 0x36) on csiphy2 / CCI1, wired per
++ * the stock phoenix dtbo (qcom,cam-sensor@5) and the stock camx sensormodule
++ * blob (laneAssign 0x10 = 2 data lanes, CUSTOM1 low, MCLK 19.2 MHz):
++ * MCLK2 = gpio15, CAMU_RESET = gpio25.  Camera rails are GPIO-gated fixed
++ * rails: vddio = TLMM gpio4, vdda = PM6150L GPIO3 (fed from vreg_bob),
++ * vddd = TLMM gpio29 (fed from vreg_s8c_1p35).  Note the analog rail lives
++ * on a PMIC GPIO - TLMM gpio0-3 stay reserved for NFC/FP and must not be
++ * referenced.
++ */
++/ {
++	cam_vddio_1v8: regulator-cam-vddio {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vddio";
++		regulator-min-microvolt = <1800000>;
++		regulator-max-microvolt = <1800000>;
++		enable-active-high;
++		gpio = <&tlmm 4 GPIO_ACTIVE_HIGH>;
++		startup-delay-us = <100>;
++	};
++
++	/*
++	 * camera_vdda_m_fa (PM6150L GPIO4, stock cam_vdda_m_fa_regulator /
++	 * cam_v_custom1) feeds the shared MIPI data-path switch and the
++	 * macro/front-aux sensors; the stock OV8856 power-up sequence raises
++	 * it together with the ultrawide rails, so it is modelled as the
++	 * parent supply of camera_vdda to keep them switched together.
++	 */
++	cam_vdda_m_fa_2v8: regulator-cam-vdda-m-fa {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdda_m_fa";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		enable-active-high;
++		gpio = <&pm6150l_gpios 4 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_bob>;
++		startup-delay-us = <100>;
++	};
++
++	cam_vdda_2v8: regulator-cam-vdda {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vdda";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++		enable-active-high;
++		gpio = <&pm6150l_gpios 3 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&cam_vdda_m_fa_2v8>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_vdda_switch>;
++		startup-delay-us = <100>;
++	};
++
++	cam_vddd_1v2: regulator-cam-vddd {
++		compatible = "regulator-fixed";
++		regulator-name = "camera_vddd";
++		regulator-min-microvolt = <1200000>;
++		regulator-max-microvolt = <1200000>;
++		enable-active-high;
++		gpio = <&tlmm 29 GPIO_ACTIVE_HIGH>;
++		vin-supply = <&vreg_s8c_1p35>;
++		startup-delay-us = <100>;
++	};
++};
++
++&pm6150l_gpios {
++	cam_vdda_switch: cam-vdda-switch-state {
++		pins = "gpio3";
++		function = PMIC_GPIO_FUNC_NORMAL;
++		power-source = <0>;
++		output-low;
++	};
++};
++
++&camss {
++	ports {
++		port@2 {
++			csiphy2_ep: endpoint {
++				data-lanes = <0 1>;
++				remote-endpoint = <&ov8856_ep>;
++			};
++		};
++	};
++};
++
++&cci1_i2c0 {
++	camera@36 {
++		compatible = "ovti,ov8856";
++		reg = <0x36>;
++
++		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_mclk2_default &cam_u_mipi_switch>;
++
++		clocks = <&camcc CAMCC_MCLK2_CLK>;
++		clock-names = "xvclk";
++		assigned-clocks = <&camcc CAMCC_MCLK2_CLK>;
++		assigned-clock-rates = <19200000>;
++
++		dovdd-supply = <&cam_vddio_1v8>;
++		avdd-supply = <&cam_vdda_2v8>;
++		dvdd-supply = <&cam_vddd_1v2>;
++
++		port {
++			ov8856_ep: endpoint {
++				link-frequencies = /bits/ 64 <720000000 360000000>;
++				data-lanes = <1 2>;
++				remote-endpoint = <&csiphy2_ep>;
++			};
++		};
++	};
++};
++
++&tlmm {
++	cam_mclk2_default: cam-mclk2-default-state {
++		pins = "gpio15";
++		function = "cam_mclk";
++		drive-strength = <4>;
++		bias-disable;
++	};
++
++	/*
++	 * csiphy2 data lanes are routed through a MIPI path switch whose
++	 * select line is gpio88 (stock CAMU_CUSTOM1); the ultrawide
++	 * streaming state is sel-low (stock cam_sensor_mipi_switch_sel_low,
++	 * camx power-up CUSTOM1 = 0; the macro sensor uses 1).
++	 */
++	cam_u_mipi_switch: cam-u-mipi-switch-state {
++		pins = "gpio88";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++		output-low;
++	};
++};
+diff --git a/arch/arm64/boot/dts/qcom/sm7150.dtsi b/arch/arm64/boot/dts/qcom/sm7150.dtsi
+index 055aa6b3e..f41778926 100644
+--- a/arch/arm64/boot/dts/qcom/sm7150.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150.dtsi
+@@ -3530,7 +3530,7 @@ cci1_i2c0: i2c-bus@0 {
+ 
+ 		venus: video-codec@aa00000 {
+ 			compatible = "qcom,sm7150-venus";
+-			reg = <0 0x0aa00000 0 0xff000>;
++			reg = <0 0x0aa00000 0 0x100000>;
+ 
+ 			interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+ 
+@@ -3569,6 +3569,8 @@ &config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ALWAYS>,
+ 
+ 			memory-region = <&venus_mem>;
+ 
++			/* keep the mainline stream spec; 0xe60 (stock sm6150
++			 * venus_ns) proved lethal on sm7150 -- see 0030 notes */
+ 			iommus = <&apps_smmu 0x1080 0x60>;
+ 
+ 			status = "disabled";
+-- 
+2.43.0
+

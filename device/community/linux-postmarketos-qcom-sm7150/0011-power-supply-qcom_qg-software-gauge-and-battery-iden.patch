@@ -1,52 +1,51 @@
+From e3a9aba9f6bbea8a0565eb917f53433a4fd3fe73 Mon Sep 17 00:00:00 2001
 From: phoenix port <fix@me>
-Subject: [PATCH] power: supply: qcom_qg: software gauge from stock OCV/SOC LUT
+Date: Fri, 18 Sep 2026 09:17:18 +0800
+Subject: [PATCH 11/13] power: supply: qcom_qg: software gauge and battery
+ identity
 
-The gauge driver falls back to a linear interpolation between
-voltage_min_design and voltage_max_design, which makes the reported
-capacity jump +-5% while the battery is under load.  Stock firmware
-instead interpolates the open-circuit voltage against a per-profile
-OCV/SOC table indexed by battery temperature.
-
-Allow the battery profile LUT to be described in DT (qcom,ocv-temp-
-legend / qcom,ocv-soc-legend / qcom,ocv-lut-data).  Boards without
-the properties keep the linear estimate.
-
-The SRAM OCV (VOLTAGE_OCV) is only the last value the gauge learned
-and can be arbitrarily stale: it is re-learned solely when the battery
-relaxes, which never happens while plugged in.  After a deep discharge
-it stays pinned at the learned low value, so the reported capacity
-sticks at e.g. 5% while the terminal voltage already reads 4.1V and
-the battery keeps charging for hours.
-
-So with a LUT present, maintain a software estimate instead: while the
-average battery current is small (<=100mA) the terminal voltage
-approximates the true OCV and re-anchors the estimate against the LUT;
-in between, coulomb counting extrapolates from the last anchor, using
-the SRAM learned capacity (fallback: charge_full_design) as the
-reference.  This mirrors what the downstream qgauge algorithm does,
-without the persistence and resistance learning.
-
-For phoenix, add the stock battery profile extracted from the stock
-dtbo (G7BNVTBM4P_4500mAh, pc-temp-v2-lut, stock unit 100 uV converted
-to uV) as sm7150-xiaomi-phoenix-battery.dtsi.
-
-Signed-off-by: phoenix port <fix@me>
+OCV/SOC LUT interpolation + relax anchoring + coulomb counting (fixes
+stuck-5% display after deep discharge), SRAM regmap access, batt-id
+channel, manufacturer/serial identity, charge status fix.
 ---
+ drivers/power/supply/qcom_qg.c | 335 +++++++++++++++++++++++++++++++--
+ 1 file changed, 316 insertions(+), 19 deletions(-)
+
+diff --git a/drivers/power/supply/qcom_qg.c b/drivers/power/supply/qcom_qg.c
+index 18276976c..3c749eb1d 100644
 --- a/drivers/power/supply/qcom_qg.c
 +++ b/drivers/power/supply/qcom_qg.c
-@@ -6,6 +6,8 @@
+@@ -6,11 +6,13 @@
  #include <linux/iio/consumer.h>
  #include <linux/init.h>
  #include <linux/kernel.h>
 +#include <linux/math64.h>
 +#include <linux/ktime.h>
  #include <linux/module.h>
+-#include <linux/nvmem-consumer.h>
  #include <linux/of.h>
  #include <linux/of_address.h>
-@@ -32,6 +34,25 @@
- /* |current| below this is treated as taper/no charge current */
- #define QG_STATUS_CURRENT_MARGIN_UA	50000
+ #include <linux/platform_device.h>
++#include <linux/property.h>
+ #include <linux/power_supply.h>
+ #include <linux/regmap.h>
  
+@@ -20,23 +22,79 @@
+ #define QG_LAST_ADC_V_DATA0_REG		0xc0 /* 2-byte 0xc0-0xc1 */
+ #define QG_LAST_ADC_I_DATA0_REG		0xc2 /* 2-byte 0xc2-0xc3 */
+ 
++/* Battery ID: BAT_ID pin has a 100 kOhm pull-up to the 1.875 V rail. */
++#define QG_BATT_ID_PULLUP_OHM		100000
++#define QG_BATT_ID_PULLUP_UV		1875000
++
+ /* SRAM offsets */
++#define QG_SRAM_BASE			0xb600
+ #define QG_SDAM_OCV_OFFSET		0x4c /* 4-byte 0x4c-0x4f */
+ #define QG_SDAM_LEARNED_CAPACITY_OFFSET	0x68 /* 2-byte 0x68-0x69 */
+ 
++/* |current| below this is treated as taper/no charge current */
++#define QG_STATUS_CURRENT_MARGIN_UA	50000
++
 +/* |average current| at or below this means the battery is relaxed and
 + * the terminal voltage can stand in for the open-circuit voltage */
 +#define QG_RELAX_CURRENT_UA		100000
@@ -69,10 +68,16 @@ Signed-off-by: phoenix port <fix@me>
  struct qcom_qg_chip {
  	struct device *dev;
  	struct regmap *regmap;
-@@ -43,6 +64,13 @@
+ 	unsigned int base;
+ 
++	struct iio_channel *batt_id_chan;
+ 	struct iio_channel *batt_therm_chan;
+ 
+-	struct nvmem_device *sdam;
+-
  	struct power_supply *batt_psy;
  	struct power_supply_battery_info *batt_info;
- 
++
 +	struct qcom_qg_lut lut;
 +
 +	/* software SOC state (see qcom_qg_capacity_from_lut) */
@@ -80,10 +85,34 @@ Signed-off-by: phoenix port <fix@me>
 +	s32			soc_est;	/* percent x 100 */
 +	ktime_t			soc_last_sample;
 +
- 	const char *manufacturer;
- 	char serial[16];
++	const char *manufacturer;
++	char serial[16];
  };
-@@ -108,11 +136,176 @@
+ 
++/*
++ * The battery pack carries a pull-down (BAT_ID) resistor that identifies
++ * it; expose its resistance as a stable serial number so battery swaps are
++ * detectable from userspace.
++ */
++static void qcom_qg_read_batt_id(struct qcom_qg_chip *chip)
++{
++	int uv, ret;
++
++	ret = iio_read_channel_processed(chip->batt_id_chan, &uv);
++	if (ret < 0 || uv <= 0 || uv >= QG_BATT_ID_PULLUP_UV) {
++		strscpy(chip->serial, "unknown", sizeof(chip->serial));
++		return;
++	}
++
++	scnprintf(chip->serial, sizeof(chip->serial), "%d",
++		  (int)div64_u64((u64)QG_BATT_ID_PULLUP_OHM * uv,
++				 QG_BATT_ID_PULLUP_UV - uv));
++}
++
+ static int qcom_qg_get_current(struct qcom_qg_chip *chip, u8 offset, int *val)
+ {
+ 	s16 temp;
+@@ -78,11 +136,176 @@ static int qcom_qg_get_voltage(struct qcom_qg_chip *chip, u8 offset, int *val)
  	return 0;
  }
  
@@ -263,7 +292,7 @@ Signed-off-by: phoenix port <fix@me>
  {
  	int ret, voltage_now;
  	int voltage_min = chip->batt_info->voltage_min_design_uv;
-@@ -136,6 +329,20 @@
+@@ -106,6 +329,63 @@ static int qcom_qg_get_capacity(struct qcom_qg_chip *chip, int *val)
  	return 0;
  }
  
@@ -281,93 +310,144 @@ Signed-off-by: phoenix port <fix@me>
 +	return qcom_qg_capacity_from_voltage(chip, val);
 +}
 +
- static int qcom_qg_get_status(struct qcom_qg_chip *chip, int *val)
- {
- 	union power_supply_propval prop = { 0 };
-@@ -331,6 +538,9 @@
++static int qcom_qg_get_status(struct qcom_qg_chip *chip, int *val)
++{
++	union power_supply_propval prop = { 0 };
++	int ret, ucur, uvolt;
++
++	if (!power_supply_am_i_supplied(chip->batt_psy)) {
++		*val = POWER_SUPPLY_STATUS_DISCHARGING;
++		return 0;
++	}
++
++	/*
++	 * Prefer what our charger reports; it knows about termination,
++	 * input suspension and charge inhibition better than any
++	 * current-sign heuristic.
++	 */
++	ret = power_supply_get_property_from_supplier(chip->batt_psy,
++					POWER_SUPPLY_PROP_STATUS, &prop);
++	if (!ret && prop.intval != POWER_SUPPLY_STATUS_UNKNOWN) {
++		*val = prop.intval;
++		return 0;
++	}
++
++	/* Fallback: classify by averaged current and voltage */
++	ret = qcom_qg_get_current(chip,
++				QG_S2_NORMAL_AVG_I_DATA0_REG, &ucur);
++	if (ret)
++		return ret;
++
++	ret = qcom_qg_get_voltage(chip,
++				QG_S2_NORMAL_AVG_V_DATA0_REG, &uvolt);
++	if (ret)
++		return ret;
++
++	if (ucur > QG_STATUS_CURRENT_MARGIN_UA)
++		*val = POWER_SUPPLY_STATUS_CHARGING;
++	else if (uvolt >= chip->batt_info->voltage_max_design_uv)
++		*val = POWER_SUPPLY_STATUS_FULL;
++	else
++		*val = POWER_SUPPLY_STATUS_NOT_CHARGING;
++
++	return 0;
++}
++
+ static enum power_supply_property qcom_qg_props[] = {
+ 	POWER_SUPPLY_PROP_STATUS,
+ 	POWER_SUPPLY_PROP_TECHNOLOGY,
+@@ -120,6 +400,8 @@ static enum power_supply_property qcom_qg_props[] = {
+ 	POWER_SUPPLY_PROP_CHARGE_FULL,
+ 	POWER_SUPPLY_PROP_CAPACITY,
+ 	POWER_SUPPLY_PROP_TEMP,
++	POWER_SUPPLY_PROP_MANUFACTURER,
++	POWER_SUPPLY_PROP_SERIAL_NUMBER,
+ };
+ 
+ static int qcom_qg_get_property(struct power_supply *psy,
+@@ -131,10 +413,10 @@ static int qcom_qg_get_property(struct power_supply *psy,
+ 
+ 	switch (psp) {
+ 	case POWER_SUPPLY_PROP_STATUS:
+-		val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+-		break;
++		return qcom_qg_get_status(chip, &val->intval);
++
+ 	case POWER_SUPPLY_PROP_TECHNOLOGY:
+-		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
++		val->intval = POWER_SUPPLY_TECHNOLOGY_LIPO;
+ 		break;
+ 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+ 		val->intval = chip->batt_info->voltage_max_design_uv;
+@@ -155,8 +437,9 @@ static int qcom_qg_get_property(struct power_supply *psy,
+ 			return ret;
+ 		break;
+ 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
+-		ret = nvmem_device_read(chip->sdam, QG_SDAM_OCV_OFFSET, 4, &val->intval);
+-		if (ret < 0)
++		ret = regmap_raw_read(chip->regmap, QG_SRAM_BASE +
++					QG_SDAM_OCV_OFFSET, &val->intval, 4);
++		if (ret)
+ 			return ret;
+ 		break;
+ 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+@@ -175,9 +458,9 @@ static int qcom_qg_get_property(struct power_supply *psy,
+ 		val->intval = chip->batt_info->charge_full_design_uah;
+ 		break;
+ 	case POWER_SUPPLY_PROP_CHARGE_FULL:
+-		ret = nvmem_device_read(chip->sdam,
+-				QG_SDAM_LEARNED_CAPACITY_OFFSET, 2, &val->intval);
+-		if (ret < 0)
++		ret = regmap_raw_read(chip->regmap, QG_SRAM_BASE +
++				QG_SDAM_LEARNED_CAPACITY_OFFSET, &val->intval, 2);
++		if (ret)
+ 			return ret;
+ 		val->intval *= 1000; /* mAh to uAh */
+ 		break;
+@@ -186,6 +469,12 @@ static int qcom_qg_get_property(struct power_supply *psy,
+ 		if (ret)
+ 			return ret;
+ 		break;
++	case POWER_SUPPLY_PROP_MANUFACTURER:
++		val->strval = chip->manufacturer;
++		break;
++	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
++		val->strval = chip->serial;
++		break;
+ 	case POWER_SUPPLY_PROP_TEMP:
+ 		ret = iio_read_channel_processed
+ 					(chip->batt_therm_chan, &val->intval);
+@@ -232,17 +521,25 @@ static int qcom_qg_probe(struct platform_device *pdev)
+ 		return dev_err_probe(chip->dev, ret,
+ 				     "Couldn't read base address\n");
+ 
++	/* ADC for Battery ID */
++	chip->batt_id_chan = devm_iio_channel_get(chip->dev, "batt-id");
++	if (IS_ERR(chip->batt_id_chan))
++		return dev_err_probe(chip->dev, PTR_ERR(chip->batt_id_chan),
++				     "Couldn't get batt-id IIO channel\n");
++
++	qcom_qg_read_batt_id(chip);
++	if (device_property_read_string(chip->dev, "manufacturer",
++					&chip->manufacturer))
++		chip->manufacturer = "Xiaomi";
++
+ 	/* ADC for thermal channel */
+ 	chip->batt_therm_chan = devm_iio_channel_get(chip->dev, "batt-therm");
+ 	if (IS_ERR(chip->batt_therm_chan))
  		return dev_err_probe(chip->dev, PTR_ERR(chip->batt_therm_chan),
  				     "Couldn't get batt-therm IIO channel\n");
  
+-	/* NVMEM for SDAM access */
+-	chip->sdam = devm_nvmem_device_get(chip->dev, NULL);
+-	if (IS_ERR(chip->sdam))
+-		return dev_err_probe(chip->dev, PTR_ERR(chip->sdam),
+-				     "Couldn't get SDAM nvmem device\n");
 +	/* Optional stock-profile OCV/SOC table: replaces the linear estimate */
 +	qcom_qg_parse_lut(chip);
-+
+ 
  	psy_cfg.drv_data = chip;
  	psy_cfg.fwnode = dev_fwnode(chip->dev);
- 
---- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
-+++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
-@@ -6,6 +6,7 @@
- /dts-v1/;
- 
- #include "sm7150-xiaomi-common.dtsi"
-+#include "sm7150-xiaomi-phoenix-battery.dtsi"
- 
- /delete-node/ &adsp_mem;
- /delete-node/ &wlan_msa_mem;
-+++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix-battery.dtsi
-@@ -0,0 +1,65 @@
-+// SPDX-License-Identifier: BSD-3-Clause
-+/*
-+ * Stock battery profile for Xiaomi POCO X2 (phoenix), battery
-+ * G7BNVTBM4P_4500mAh (BAT_ID ~100 kOhm).  Values extracted from the
-+ * stock dtbo (fdt-05) pc-temp-v2-lut; stock stores OCV in units of
-+ * 100 uV, converted to uV here.  Rows = SOC * 100 (descending),
-+ * columns = temperature degC (ascending).  Consumed by qcom_qg to
-+ * estimate capacity from open-circuit voltage like stock does.
-+ */
-+
-+&pm6150_qgauge {
-+	/* Stock battery profile LUT (G7BNVTBM4P_4500mAh, extracted from
-+	 * stock dtbo fdt-05; OCV uV indexed by SOC x100 rows x temp degC cols).
-+	 * Replaces the voltage-linear capacity estimate. */
-+	qcom,ocv-temp-legend = <(-10) 0 10 25 40 50>;
-+	qcom,ocv-soc-legend = <						10000 9800 9600 9400 9200 9000 8800 8600
-+						8400 8200 8000 7800 7600 7400 7200 7000
-+						6800 6600 6400 6200 6000 5800 5600 5400
-+						5200 5000 4800 4600 4400 4200 4000 3800
-+						3600 3400 3200 3000 2800 2600 2400 2200
-+						2000 1800 1600 1400 1200 1000 900 800
-+						700 600 500 400 300 200 100 0>;
-+	qcom,ocv-lut-data = <						4387500 4385000 4383000 4381500 4376500 4375000 4355000 4353500
-+						4355600 4355700 4351100 4349500 4324600 4323900 4329200 4330500
-+						4326300 4324700 4296800 4296600 4303700 4306000 4302200 4300600
-+						4271400 4271500 4279300 4282300 4278900 4277500 4246900 4247000
-+						4255200 4258700 4255700 4254400 4222700 4222500 4231400 4235200
-+						4232300 4231100 4199100 4198400 4207800 4211800 4208900 4207800
-+						4175900 4174600 4184700 4188800 4186000 4184900 4153000 4150700
-+						4162000 4166200 4163300 4162200 4131200 4128500 4139800 4143800
-+						4140900 4139800 4112100 4109300 4118600 4121700 4118900 4117800
-+						4093800 4091200 4097800 4099900 4097300 4096300 4072400 4070400
-+						4077100 4079300 4076600 4075600 4047300 4046900 4056500 4059600
-+						4056700 4055300 4020500 4023300 4036100 4040000 4037200 4035900
-+						3990300 4000700 4016000 4019400 4017800 4017300 3959900 3978800
-+						3996300 3999300 3999100 3999400 3938700 3958300 3977100 3982200
-+						3982100 3982500 3923900 3939000 3958500 3967800 3967300 3967000
-+						3910100 3920200 3939100 3951200 3950500 3949700 3895300 3900800
-+						3916700 3927100 3927000 3926600 3880500 3882000 3894200 3901300
-+						3901800 3901900 3865400 3866300 3876700 3882200 3882900 3883200
-+						3849400 3852800 3862400 3866700 3867800 3868100 3835800 3840500
-+						3849800 3853600 3854900 3855200 3826400 3828100 3838500 3842300
-+						3843600 3843800 3818800 3816900 3828400 3832400 3833600 3833700
-+						3811900 3808900 3819200 3823400 3824400 3824400 3805600 3803000
-+						3810700 3815100 3815900 3815700 3800000 3798100 3803100 3807500
-+						3808200 3807900 3794900 3793600 3795700 3800300 3801400 3801100
-+						3790100 3789500 3789200 3793700 3795100 3794700 3785400 3785900
-+						3784600 3787600 3788600 3787900 3780800 3782900 3781400 3782200
-+						3782200 3780900 3776200 3779500 3777900 3776500 3774900 3772800
-+						3771300 3775100 3774000 3770200 3765500 3761900 3766200 3769700
-+						3769600 3763400 3755200 3750000 3760400 3763700 3763800 3756100
-+						3746400 3740700 3754000 3756800 3756300 3748300 3738700 3733200
-+						3746600 3748700 3747400 3739600 3730600 3725200 3736900 3738100
-+						3736600 3729800 3721700 3716000 3725500 3725300 3724100 3718600
-+						3711400 3705300 3714300 3710300 3709400 3704700 3697200 3691300
-+						3704400 3696300 3696300 3692800 3686200 3680100 3696300 3687000
-+						3689000 3687100 3681600 3676100 3692500 3683500 3686600 3686000
-+						3680300 3675300 3688500 3680200 3684400 3684000 3679000 3673900
-+						3683700 3675500 3680800 3681300 3676800 3671100 3676200 3667400
-+						3673300 3673600 3669000 3661900 3657700 3647500 3651000 3646300
-+						3639700 3628900 3618200 3606500 3601600 3595300 3590500 3579000
-+						3558200 3545800 3536400 3530000 3526800 3513900 3473200 3460700
-+						3447900 3439300 3439400 3426100 3336500 3321900 3312300 3305400
-+						3308100 3292200 2858300 2857000 2811400 2812000 2877100 2859700>;
-+};
+-- 
+2.43.0
+

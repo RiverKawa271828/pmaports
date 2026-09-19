@@ -1,33 +1,54 @@
-From: OpenCode <opencode@localhost>
-Date: Mon, 24 Aug 2026 00:00:00 +0000
-Subject: [PATCH] input: misc: add Qualcomm QPNP vibrator LDO driver
+From e07e57c99f786f2b922974138637d0a1128c3e05 Mon Sep 17 00:00:00 2001
+From: phoenix port <fix@me>
+Date: Fri, 18 Sep 2026 09:16:52 +0800
+Subject: [PATCH 03/13] input: misc: add Qualcomm QPNP vibrator LDO driver
 
-Phoenix (and other PM6150 devices) use a plain LDO-driven ERM motor,
-qcom,qpnp-vibrator-ldo in the downstream kernel. The mainline
-pm8xxx-vibrator pmi632 compat layer writes a similar VSET encoding but
-never polls VREG_READY and its register mapping has not produced motion
-on this device. Port the downstream leds-qpnp-vibrator-ldo.c behaviour
-(set voltage at base+0x40, EN bit7 at base+0x46, poll STATUS1 bit7)
-as a minimal ff-memless input driver, modelled on pm8xxx-vibrator.c.
-
-The input device keeps the historical "pm8xxx_vib_ffmemless" name so
-existing feedbackd udev rules keep matching.
-
-Downstream reference: CAF drivers/leds/leds-qpnp-vibrator-ldo.c
-(https://raw.githubusercontent.com/LineageOS/android_kernel_xiaomi_sm8150/lineage-18.1/drivers/leds/leds-qpnp-vibrator-ldo.c)
-
-Stock DT parameters (pm6150.dtsi): qcom,vib-ldo-volt-uv = <3000000>,
-overdrive disabled - reflected in the phoenix DTS override.
 ---
- drivers/input/misc/Kconfig             |  10 ++
+ drivers/input/misc/Kconfig             |  13 ++
  drivers/input/misc/Makefile            |   1 +
- drivers/input/misc/qcom-vibrator-ldo.c | 233 +++++++++++++++++++++++++
- arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts | 6 +++-
- 4 files changed, 249 insertions(+), 1 deletion(-)
+ drivers/input/misc/qcom-vibrator-ldo.c | 238 +++++++++++++++++++++++++
+ 3 files changed, 252 insertions(+)
+ create mode 100644 drivers/input/misc/qcom-vibrator-ldo.c
 
+diff --git a/drivers/input/misc/Kconfig b/drivers/input/misc/Kconfig
+index a11c888ee..0a9010193 100644
+--- a/drivers/input/misc/Kconfig
++++ b/drivers/input/misc/Kconfig
+@@ -236,6 +236,19 @@ config INPUT_PM8XXX_VIBRATOR
+ 	  To compile this driver as module, choose M here: the
+ 	  module will be called pm8xxx-vibrator.
+ 
++config INPUT_QCOM_VIBRATOR_LDO
++	tristate "Qualcomm QPNP vibrator LDO support"
++	depends on MFD_SPMI_PMIC
++	select INPUT_FF_MEMLESS
++	help
++	  This option enables support for the LDO-driven vibration motor
++	  found on Qualcomm PM6150/PMI632 chips (qcom,qpnp-vibrator-ldo).
++	  This driver supports the ff-memless interface from the input
++	  framework.
++
++	  To compile this driver as module, choose M here: the
++	  module will be called qcom-vibrator-ldo.
++
+ config INPUT_PMIC8XXX_PWRKEY
+ 	tristate "PMIC8XXX power key support"
+ 	depends on MFD_PM8XXX
+diff --git a/drivers/input/misc/Makefile b/drivers/input/misc/Makefile
+index a290fe2d3..4fbe2a614 100644
+--- a/drivers/input/misc/Makefile
++++ b/drivers/input/misc/Makefile
+@@ -67,6 +67,7 @@ obj-$(CONFIG_INPUT_PCSPKR)		+= pcspkr.o
+ obj-$(CONFIG_INPUT_PF1550_ONKEY)	+= pf1550-onkey.o
+ obj-$(CONFIG_INPUT_PM8941_PWRKEY)	+= pm8941-pwrkey.o
+ obj-$(CONFIG_INPUT_PM8XXX_VIBRATOR)	+= pm8xxx-vibrator.o
++obj-$(CONFIG_INPUT_QCOM_VIBRATOR_LDO)	+= qcom-vibrator-ldo.o
+ obj-$(CONFIG_INPUT_PMIC8XXX_PWRKEY)	+= pmic8xxx-pwrkey.o
+ obj-$(CONFIG_INPUT_POWERMATE)		+= powermate.o
+ obj-$(CONFIG_INPUT_PWM_BEEPER)		+= pwm-beeper.o
 diff --git a/drivers/input/misc/qcom-vibrator-ldo.c b/drivers/input/misc/qcom-vibrator-ldo.c
 new file mode 100644
-index 000000000000..010203040506
+index 000000000..030a3fd7d
 --- /dev/null
 +++ b/drivers/input/misc/qcom-vibrator-ldo.c
 @@ -0,0 +1,238 @@
@@ -269,57 +290,6 @@ index 000000000000..010203040506
 +MODULE_DESCRIPTION("Qualcomm QPNP vibrator LDO driver (ff-memless)");
 +MODULE_LICENSE("GPL");
 +MODULE_AUTHOR("OpenCode <opencode@localhost>");
-diff --git a/drivers/input/misc/Kconfig b/drivers/input/misc/Kconfig
-index 123456789abc..23456789abcd 100644
---- a/drivers/input/misc/Kconfig
-+++ b/drivers/input/misc/Kconfig
-@@ -240,6 +240,19 @@ config INPUT_PM8XXX_VIBRATOR
- 	  To compile this driver as module, choose M here: the
- 	  module will be called pm8xxx-vibrator.
- 
-+config INPUT_QCOM_VIBRATOR_LDO
-+	tristate "Qualcomm QPNP vibrator LDO support"
-+	depends on MFD_SPMI_PMIC
-+	select INPUT_FF_MEMLESS
-+	help
-+	  This option enables support for the LDO-driven vibration motor
-+	  found on Qualcomm PM6150/PMI632 chips (qcom,qpnp-vibrator-ldo).
-+	  This driver supports the ff-memless interface from the input
-+	  framework.
-+
-+	  To compile this driver as module, choose M here: the
-+	  module will be called qcom-vibrator-ldo.
-+
- config INPUT_PMIC8XXX_PWRKEY
- 	tristate "Qualcomm PMIC8XXX power key support"
- 	depends on MFD_PM8XXX
-diff --git a/drivers/input/misc/Makefile b/drivers/input/misc/Makefile
-index 123456789abc..23456789abcd 100644
---- a/drivers/input/misc/Makefile
-+++ b/drivers/input/misc/Makefile
-@@ -69,6 +69,7 @@ obj-$(CONFIG_INPUT_PCSPKR)		+= pcspkr.o
- obj-$(CONFIG_INPUT_PF1550_ONKEY)	+= pf1550-onkey.o
- obj-$(CONFIG_INPUT_PM8941_PWRKEY)	+= pm8941-pwrkey.o
- obj-$(CONFIG_INPUT_PM8XXX_VIBRATOR)	+= pm8xxx-vibrator.o
-+obj-$(CONFIG_INPUT_QCOM_VIBRATOR_LDO)	+= qcom-vibrator-ldo.o
- obj-$(CONFIG_INPUT_PMIC8XXX_PWRKEY)	+= pmic8xxx-pwrkey.o
- obj-$(CONFIG_INPUT_POWERMATE)		+= powermate.o
- obj-$(CONFIG_INPUT_PWM_BEEPER)		+= pwm-beeper.o
-diff --git a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
-index 123456789abc..23456789abcd 100644
---- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
-+++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-phoenix.dts
-@@ -132,5 +132,10 @@
- &pm6150_vib {
- 	status = "okay";
-+	/* Use the dedicated LDO vibrator driver instead of the pmi632
-+	 * compat layer in pm8xxx-vibrator; stock setpoint is 3.0 V.
-+	 */
-+	compatible = "qcom,qpnp-vibrator-ldo";
-+	qcom,vib-ldo-volt-uv = <3000000>;
- };
- 
- &pm6150_gpios {
---
-2.47.3
+-- 
+2.43.0
 
