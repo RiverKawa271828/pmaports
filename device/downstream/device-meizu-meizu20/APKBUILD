@@ -1,0 +1,38 @@
+# Reference: <https://postmarketos.org/devicepkg>
+#
+# M1 骨架（2026-09-21）：轨 A = 复用官方 GKI 内核 5.15.119-android13
+# （boot.img 仅内核），内核打包方式未定（TODO：linux-meizu20 包装官方
+# 内核，或 pmbootstrap 流程外手工 mkbootimg 组装），故 depends 暂不含
+# 内核包——`pmbootstrap install` 前必须补上（M1 设计点，见工作区
+# docs/meizu20/ 的 HANDOFF/porting-plan）。
+# 硬件调研与安全规则：meizu20_linux 固件资产 + 本工作区 docs/meizu20/。
+maintainer="ri <ri@example.com>"
+pkgname=device-meizu-meizu20
+pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
+pkgver=0
+pkgrel=0
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck"
+depends="
+	mkbootimg
+	postmarketos-base
+	postmarketos-base-downstream
+"
+makedepends="devicepkg-dev"
+source="
+	deviceinfo
+"
+
+build() {
+	devicepkg_build $startdir $pkgname
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+}
+
+sha512sums="
+b1f81292992145b18d152ecd8fc83e9031509c3039036f837364d38ed3238425d068951b509e6a54ce4e15de4c08bb003fa8c431f4e71f73d8112231cec07a35  deviceinfo
+"

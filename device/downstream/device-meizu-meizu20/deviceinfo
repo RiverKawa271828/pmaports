@@ -1,0 +1,23 @@
+# Reference: <https://postmarketos.org/deviceinfo>
+# Please use double quotes only. You can source this file in shell
+# scripts.
+
+deviceinfo_format_version="0"
+deviceinfo_name="Meizu 20"
+deviceinfo_manufacturer="Meizu"
+deviceinfo_codename="meizu20"
+deviceinfo_year="2023"
+deviceinfo_arch="aarch64"
+
+# Device related
+deviceinfo_chassis="handset"
+
+# Bootloader related
+# ABL + GKI 2.0：boot.img 仅含内核（kernel-only），DTB/bootconfig 在
+# vendor_boot。轨 A 复用官方 vendor_boot；pmOS 侧 boot 组装策略（自建
+# initramfs + mkbootimg）是 M1 设计点，以下为基础占位。
+deviceinfo_flash_method="fastboot"
+deviceinfo_generate_bootimg="true"
+deviceinfo_flash_pagesize="4096"
+# TODO(M1): GKI boot image header version (v4)、kernel/ramdisk 偏移、
+# dtbo_idx=9 对应 overlay 的处理、vendor_boot 复用方式、AB 槽刷写语法。
