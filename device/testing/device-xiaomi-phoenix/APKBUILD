@@ -1,9 +1,9 @@
 # Reference: <https://postmarketos.org/devicepkg>
-maintainer="Ankit Pipalia <ankit@example.com>"
+maintainer="ri <ri@example.com>"
 pkgname=device-xiaomi-phoenix
 pkgdesc="Xiaomi POCO X2 / Redmi K30 4G"
 pkgver=1
-pkgrel=30
+pkgrel=33
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -22,7 +22,6 @@ depends="
 	postmarketos-base
 	soc-qcom
 	soc-qcom-modem
-	soc-qcom-pd-mapper
 	soc-qcom-qbootctl
 	systemd-boot
 	unl0kr-fbforcerefresh
@@ -32,7 +31,7 @@ install="
 	$pkgname.post-install
 	$pkgname.post-upgrade
 "
-	source="
+source="
 	00-phoenix-notification-policy
 	00-phoenix-notification-policy.lock
 	52_phoenix_eth_trust.nft
@@ -268,27 +267,6 @@ package() {
 		"$pkgdir"/etc/doas.d/99-user-nopass.conf
 	install -Dm440 "$srcdir"/sudoers-user-nopass.conf \
 		"$pkgdir"/etc/sudoers.d/90-user-nopass
-
-	# Enable NetworkManager at boot (required for WiFi/Ethernet in phosh)
-	mkdir -p "$pkgdir"/etc/runlevels/default
-	ln -sf /etc/init.d/networkmanager \
-		"$pkgdir"/etc/runlevels/default/networkmanager
-
-	# Enable Bluetooth at boot
-	ln -sf /etc/init.d/bluetooth \
-		"$pkgdir"/etc/runlevels/default/bluetooth
-
-	# Enable elogind at boot (required for phosh reboot/shutdown)
-	ln -sf /etc/init.d/elogind \
-		"$pkgdir"/etc/runlevels/default/elogind
-}
-
-subpackages="$pkgname-nonfree-firmware:nonfree_firmware"
-
-nonfree_firmware() {
-	pkgdesc="Firmware for GPU, WiFi, modem, DSP (required for most functionality)"
-	depends="firmware-xiaomi-phoenix"
-	mkdir "$subpkgdir"
 }
 
 sha512sums="
@@ -315,7 +293,7 @@ d05e663b91e799f2f270b457b0c8a263a9ff0e70ab64a5a517553d96ea7f5d350aac1321ab1c5bb8
 15b31d61155b76b378a74360f693021969ec0872ff022757e87471faebd11e1a57bc7af57d7b50794fefbacf674a0da75c3d90280cf5cad4ef5b51f1eff757ed  phoenix-typec-sink.timer
 d01eb2cfb683c93f8802fb7bbc19651f25dd5be2161960d267a73578c792e125e8cb13b06bec91e488df0294d33b618cbab6e20c01e53498d1799602a85917fb  phoenix-dsp-recovery.sh
 75b9e63e5d6be8e0c61fd4303b6ef5d959d8bff9cceeac03038c4dc9c3271a36aaf5ead126dde9734184b0c1e49eb3432902ac8c10a6dbc29bee35115f6bb19b  phoenix-dsp-recovery.service
-e745c9f1e74e37d4f1b377865341e7ca275790483458476b679e709351d7fd0dd846f038e89d225ce487a8a4d6eebe5cb0b4ba2efdc11d46b3960bc89d39e4a1  phoenix-sdp-cap.sh
+988854f9a2b171d667a3218bf3b64c95012c2fb325ec22b4cd02c2bad2badce9050b71b4b4ececf601398f8f891542679cc66c09d9dbc9926bd95b73a27e8616  phoenix-sdp-cap.sh
 1dd57ea7e785eb9bf0bebed8e11b67a75c5449be729754e0327129293513b978f40cb0aa403a208c05a605d07b9171f6e4516989551ca6f78bbd98382b7ee46a  phoenix-sdp-cap.service
 e8409f6ead544a88024e492ac87105a9a8b5046038734694d2576238735c3be73a117f32da1d07719116281d0e5c250331800dac6a9820f1e38538db040857f5  phoenix-sdp-cap.timer
 9279fb06d62e20089013af07905bb44d96068597b505b45eb4f05e8bc904350c46a6608dc39b1e21c3828caafd0f50f019e133bee79061d46b7b7aa2e498928e  90-phoenix-sdp-cap.preset

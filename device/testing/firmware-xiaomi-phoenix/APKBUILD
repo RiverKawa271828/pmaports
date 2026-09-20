@@ -1,4 +1,4 @@
-maintainer="Ankit Pipalia <ankit@example.com>"
+maintainer="ri <ri@example.com>"
 pkgname=firmware-xiaomi-phoenix
 pkgver=1
 pkgrel=14
