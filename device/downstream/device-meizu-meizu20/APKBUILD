@@ -1,24 +1,38 @@
 # Reference: <https://postmarketos.org/devicepkg>
 #
-# M1 骨架（2026-09-21）：轨 A = 复用官方 GKI 内核 5.15.119-android13
-# （boot.img 仅内核），内核打包方式未定（TODO：linux-meizu20 包装官方
-# 内核，或 pmbootstrap 流程外手工 mkbootimg 组装），故 depends 暂不含
-# 内核包——`pmbootstrap install` 前必须补上（M1 设计点，见工作区
-# docs/meizu20/ 的 HANDOFF/porting-plan）。
-# 硬件调研与安全规则：meizu20_linux 固件资产 + 本工作区 docs/meizu20/。
+# Meizu 20 (m2381, SM8550 / kalama). Boot chain (2026-09-27 现态):
+#   XBL -> ABL -> Mu-Silicium chainload (payload in boot_b) -> bare-jump
+#   mainline arm64 Image. Mu's delivery contract: boot_b Android boot
+#   image with ramdisk field = raw Image, dtb field = our DTB, MZSF stamp
+#   at header 0x800; no initrd / no cmdline passed.
+#
+# root = userdata partition (sda22, ext4) flashed with the pmOS rootfs
+# image - pmOS standard posture for Android boot chain devices. The
+# kernel finds root via CONFIG_CMDLINE_FORCE (baked in
+# linux-meizu-meizu20's config: root=/dev/sda22) because nothing in this
+# chain can hand the kernel a cmdline or initramfs.
+#
+# boot_b assembly is external for now (meizu20-m1/tools/ packers +
+# handoff-stamp.py); deviceinfo_generate_bootimg is intentionally NOT
+# set - pmOS's mkbootimg layout (initramfs in ramdisk field) does not
+# match Mu's contract. Flashing is manual fastboot from the fastboot
+# sandbox (hence flash_method="none").
+#
+# Current interactive channel: USB NCM gadget (18d1:4ee1, 172.16.42.1)
+# from the running rootfs; mkinitfs NCM+ssh takeover is blocked on Mu
+# gaining initrd delivery - do not remove this comment before that.
 maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
-pkgver=0
+pkgver=1
 pkgrel=0
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
 options="!check !archcheck"
 depends="
-	mkbootimg
+	linux-meizu-meizu20
 	postmarketos-base
-	postmarketos-base-downstream
 "
 makedepends="devicepkg-dev"
 source="
@@ -34,5 +48,5 @@ package() {
 }
 
 sha512sums="
-b1f81292992145b18d152ecd8fc83e9031509c3039036f837364d38ed3238425d068951b509e6a54ce4e15de4c08bb003fa8c431f4e71f73d8112231cec07a35  deviceinfo
+c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e3f5014f69f7dbde9e2e0810a5917bfe0e9b87064eeba2feb  deviceinfo
 "

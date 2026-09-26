@@ -1,0 +1,108 @@
+# Meizu 20 (m2381, SM8550 / kalama) mainline kernel.
+#
+# Doctrine ("干净主线内核 + 我们的 DTS"): upstream = silime's public
+# 7.3.0-dev tree (mainline 7.3.0-rc3 + SM8550 device enablement incl. the
+# Meizu 20 Infinity reference DTS); our entire delta is the single DTS
+# patch below. Local dev tree: meizu20-m1/m1-work/silime-linux (branch
+# meizu20-m2381-local); provenance snapshot: meizu20-m1/kernel/.
+#
+# Boot chain is NOT pmOS-standard: Mu-Silicium chainload (boot_b payload)
+# bare-jumps the kernel. Mu's delivery contract (see UfsDeviceInitDxe):
+# ramdisk field = RAW UNCOMPRESSED arm64 Image, dtb field = our DTB,
+# MZSF stamp at header offset 0x800 = sysfb_primary_display offset
+# (computed at pack time, never baked). Mu passes no initrd and no
+# cmdline, so CONFIG_CMDLINE_FORCE in the shipped config carries
+# root=/dev/sda22 (userdata, ext4) - when changing it, keep the device
+# package comment in sync.
+#
+# NOTE: this config is the on-device bring-up config (out-ml1b-gcc13)
+# minus the built-in initramfs (INITRAMFS_SOURCE cleared - the pmOS rootfs
+# replaces it; the mz-init rescue initramfs was baked at kernel build time
+# before) and with the pmOS root= cmdline. Re-validation on device is
+# mandatory for every rebuild until first stable pmOS boot.
+maintainer="ri <ri@example.com>"
+_flavor="meizu-meizu20"
+pkgname=linux-$_flavor
+pkgver=7.3.0_rc3
+pkgrel=0
+pkgdesc="Mainline kernel for Meizu 20 (SM8550)"
+arch="aarch64"
+_carch="arm64"
+url="https://github.com/silime/linux"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps
+	pmb:cross-native
+	"
+makedepends="
+	bison
+	clang
+	findutils
+	flex
+	lld
+	llvm
+	openssl-dev
+	perl
+	postmarketos-installkernel
+	python3
+	zstd
+	"
+
+# silime/linux 7.3.0-dev baseline the DTS patch applies to
+_commit="3a94ad18d21de4c685c05937fb646517943910a1"
+
+source="
+	$pkgname-v$pkgver.tar.gz::$url/archive/$_commit.tar.gz
+	config-$_flavor.$arch
+	0001-arm64-dts-qcom-add-Meizu-20-m2381-device-tree.patch
+"
+builddir="$srcdir/linux-$_commit"
+
+prepare() {
+	default_prepare
+	cp "$srcdir/config-$_flavor.$arch" .config
+}
+
+build() {
+	unset LDFLAGS
+	make ARCH="$_carch" LLVM=1 \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor"
+}
+
+package() {
+	# plain `install` (not zinstall): the Mu chain needs the raw
+	# uncompressed Image, not Image.gz
+	make modules_install dtbs_install install \
+		ARCH="$_carch" \
+		LLVM=1 \
+		INSTALL_PATH="$pkgdir"/boot \
+		INSTALL_MOD_PATH="$pkgdir"/usr \
+		INSTALL_MOD_STRIP=1 \
+		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs-tmp
+
+	mkdir -p "$pkgdir"/boot/dtbs/qcom
+	cp -r "$pkgdir"/boot/dtbs-tmp/qcom/sm8550-meizu-20.dtb \
+		"$pkgdir"/boot/dtbs/qcom/
+	rm -rf "$pkgdir"/boot/dtbs-tmp
+
+	# pmOS convention: boot/vmlinuz = the raw arm64 Image
+	# (arm64 install.sh names it vmlinux-$ver)
+	for f in "$pkgdir"/boot/vmlinux-*; do
+		[ -e "$f" ] || continue
+		cp "$f" "$pkgdir"/boot/vmlinuz
+	done
+
+	rm -f "$pkgdir"/lib/modules/*/build "$pkgdir"/lib/modules/*/source
+
+	install -D "$builddir"/include/config/kernel.release \
+		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+	# pack-time MZSF stamp needs the sysfb_primary_display offset;
+	# source it from here (nm-style lookup), never from a baked constant
+	install -Dm644 "$builddir"/System.map \
+		"$pkgdir"/usr/share/kernel/$_flavor/System.map
+}
+
+sha512sums="
+399201f1c46562fcc1f372c751a35f20cace6d3891b31041dc3ba3a3d6e5e869d2692b21d5bc664c72648af61bb826647c3dcd76b115753ec00a0de8581fc435  linux-meizu-meizu20-v7.3.0_rc3.tar.gz
+4eed4d24452cd80ae7200ba797800d5b258e15040adada6ea2cb740ea1cc3484c01e4cffe6f53675a2ae180a23df3b2a98b6c9c361aafaaf4631c3a636b5d8a2  config-meizu-meizu20.aarch64
+a2829face44e1e7bde41dd228aa58515f89b850b2bce347c01e2c69d913ccfeccd3ca0f21cd26a933d4e90393fcc05d897b52644151bce8131f5de992c89e5cf  0001-arm64-dts-qcom-add-Meizu-20-m2381-device-tree.patch
+"
