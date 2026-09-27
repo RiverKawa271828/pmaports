@@ -601,7 +601,7 @@ CONFIG_ARM64_CONTPTE=y
 # CONFIG_ARM64_ACPI_PARKING_PROTOCOL is not set
 CONFIG_CMDLINE="earlycon=efifb console=ttyMSM0,115200n8 qcom_geni_serial.con_enabled=1 console=tty1 root=/dev/sda22 rootwait rw loglevel=7 fw_devlink=off clk_ignore_unused pd_ignore_unused icc-rpmh.qos_disable=1 icc_rpmh_qos_disable=1 sysrq_always_enabled oops=panic pmos.debug-shell"
 # CONFIG_CMDLINE_FROM_BOOTLOADER is not set
-CONFIG_CMDLINE_FORCE=y
+# CONFIG_CMDLINE_FORCE is not set
 CONFIG_EFI_STUB=y
 CONFIG_EFI=y
 # CONFIG_COMPRESSED_INSTALL is not set
@@ -6262,6 +6262,7 @@ CONFIG_DRM_PANEL=y
 # CONFIG_DRM_PANEL_BOE_HIMAX8279D is not set
 # CONFIG_DRM_PANEL_BOE_TD4320 is not set
 # CONFIG_DRM_PANEL_BOE_TH101MB31UIG002_28A is not set
+CONFIG_DRM_PANEL_BOE_MEIZU20=y
 CONFIG_DRM_PANEL_BOE_TV101WUM_NL6=m
 # CONFIG_DRM_PANEL_BOE_TV101WUM_LL2 is not set
 # CONFIG_DRM_PANEL_CHIPONE_ICNA35XX is not set

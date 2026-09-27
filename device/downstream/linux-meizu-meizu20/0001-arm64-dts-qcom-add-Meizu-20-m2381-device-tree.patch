@@ -1,36 +1,21 @@
-From 3a94ad18d21de4c685c05937fb646517943910a1 Mon Sep 17 00:00:00 2001
-Subject: [PATCH] arm64: dts: qcom: add Meizu 20 (m2381) device tree
-
-Meizu 20 (m2381, SM8550 / kalama) mainline device tree. Derived from
-silime's sm8550-meizu-20-inf.dts (Meizu 20 Infinity): model/compatible
-for m2381, panel node left as a disabled placeholder (mainline has no
-driver for this BOE AMOLED yet; console runs through the simplefb node
-under /chosen), panel reset-gpio corrected to TLMM 205.
-
-SoC / PMIC / UFS / USB follow the inf reference unchanged.
-
-Local dev tree: meizu20-m1/m1-work/silime-linux, branch
-meizu20-m2381-local (net delta vs this base is exactly this patch).
-Snapshot + provenance: meizu20-m1/kernel/ (workspace superproject).
----
 diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
-index e5db19fc346e..f60119eae154 100644
+index e5db19f..63ed9af 100644
 --- a/arch/arm64/boot/dts/qcom/Makefile
 +++ b/arch/arm64/boot/dts/qcom/Makefile
-@@ -395,6 +395,7 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-qrd.dtb
+@@ -391,6 +391,7 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-hdk-display-card.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-hdk-rear-camera-card.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-hdk.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-mtp.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-meizu-20.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-qrd.dtb
  dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-samsung-q5q.dtb
  dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-sony-xperia-yodo-pdx234.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-meizu-20-inf.dtb
-+dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-meizu-20.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= sm8650-ayaneo-pocket-s2.dtb
- 
- sm8650-hdk-display-card-dtbs	:= sm8650-hdk.dtb sm8650-hdk-display-card.dtbo
 diff --git a/arch/arm64/boot/dts/qcom/sm8550-meizu-20.dts b/arch/arm64/boot/dts/qcom/sm8550-meizu-20.dts
 new file mode 100644
-index 000000000000..b07604de58ca
+index 0000000..a61d139
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/sm8550-meizu-20.dts
-@@ -0,0 +1,1775 @@
+@@ -0,0 +1,1776 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Device Tree Source for Meizu 20 Inf (SM8550/Kalama)
@@ -1024,7 +1009,7 @@ index 000000000000..b07604de58ca
 +		reset-gpios = <&tlmm 24 GPIO_ACTIVE_LOW>;
 +
 +		avdd-supply = <&vreg_l14b_3p2>;
-+		/* vddio-supply = <&vreg_l12b_1p8>; TODO(m2381-panel) */
++		vddio-supply = <&vreg_l12b_1p8>;
 +
 +		touchscreen-size-x = <1368>;
 +		touchscreen-size-y = <3192>;
@@ -1139,8 +1124,9 @@ index 000000000000..b07604de58ca
 +};
 +
 +&mdss_dp0 {
-+	status = "okay";
-+	sound-name-prefix = "Display Port0";
++	/* m2381: DP 组件 deferred 拖死 DRM 组件等待 ⇒ DSI/panel 永不 probe;
++	 * 本机无 DP 用例,禁用(2026-09-28 面板 bring-up)。 */
++	status = "disabled";
 +};
 +
 +&mdss_dsi0 {
@@ -1159,10 +1145,10 @@ index 000000000000..b07604de58ca
 +		pinctrl-1 = <&sde_dsi_suspend>, <&sde_te_suspend>;
 +		pinctrl-names = "default", "sleep";
 +
-+		/* avdd-supply = <&panel_avdd>; TODO(m2381-panel) */
-+		/* vci-supply = <&vreg_l13b_3p0>; TODO(m2381-panel) */
-+		/* vdd-supply = <&vreg_l11b_1p1>; TODO(m2381-panel) */
-+		/* vddio-supply = <&vreg_l12b_1p8>; TODO(m2381-panel) */
++		avdd-supply = <&panel_avdd>;
++		vci-supply = <&vreg_l13b_3p0>;
++		vdd-supply = <&vreg_l11b_1p1>;
++		vddio-supply = <&vreg_l12b_1p8>;
 +
 +		reset-gpios = <&tlmm 205 GPIO_ACTIVE_LOW>;
 +

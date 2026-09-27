@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=1
+pkgrel=2
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -45,6 +45,7 @@ depends="
 makedepends="devicepkg-dev"
 source="
 	deviceinfo
+	modprobe.conf
 "
 
 build() {
@@ -53,8 +54,11 @@ build() {
 
 package() {
 	devicepkg_package $startdir $pkgname
+	install -Dm644 "$srcdir/modprobe.conf" \
+		"$pkgdir"/etc/modprobe.d/50-meizu20-blacklist.conf
 }
 
 sha512sums="
 c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e3f5014f69f7dbde9e2e0810a5917bfe0e9b87064eeba2feb  deviceinfo
+be3b0c0c5b4912771ca688d735f29f392028a9c2c02d1d2fed88eff17ca6bd7ac9d415e3a66194db3045c9b3a21bd53645df653af430741c7d0bafc71c747cdd  modprobe.conf
 "
