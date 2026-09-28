@@ -1,0 +1,19 @@
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_hw_dsc.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_hw_dsc.c
+@@ -73,6 +73,16 @@
+ 
+ 	DPU_REG_WRITE(c, DSC_ENC, data);
+ 
++	/* DIAG (2026-09-28): dump what the encoder is actually programmed with,
++	 * so a cold-boot-good vs DPMS-bad comparison is possible without eyes. */
++	pr_info("DIAG-DSC[%d]: mode 0x%x init_lines %u enc 0x%08x pic %ux%u slice %ux%u chunk %u bp %d bpp %u bpc %u ver %u.%u\n",
++		hw_dsc->idx, mode, initial_lines, data,
++		dsc->pic_width, dsc->pic_height, dsc->slice_width,
++		dsc->slice_height, dsc->slice_chunk_size,
++		dsc->block_pred_enable, dsc->bits_per_pixel,
++		dsc->bits_per_component, dsc->dsc_version_major,
++		dsc->dsc_version_minor);
++
+ 	data = dsc->pic_width << 16;
+ 	data |= dsc->pic_height;
+ 	DPU_REG_WRITE(c, DSC_PICTURE, data);

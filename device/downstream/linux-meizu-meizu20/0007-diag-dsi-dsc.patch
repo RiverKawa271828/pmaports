@@ -1,0 +1,19 @@
+--- a/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -983,6 +983,16 @@
+ 
+ 		dsi_write(msm_host, REG_DSI_COMMAND_COMPRESSION_MODE_CTRL, reg_ctrl);
+ 		dsi_write(msm_host, REG_DSI_COMMAND_COMPRESSION_MODE_CTRL2, reg_ctrl2);
++
++		/* DIAG (2026-09-28): command-mode DSC packetisation, and the
++		 * read-back of what the controller really latched. */
++		dev_info(&msm_host->pdev->dev,
++			 "DIAG-DSI: cmd-mode DSC: slices/intf %u slice_per_pkt %u bytes_per_pkt %u eol_bytes %u pkt_per_line %u reg 0x%08x ctrl 0x%08x ctrl2 0x%08x chunk %u rb [0x%08x 0x%08x]\n",
++			 slice_per_intf, msm_host->dsc_slice_per_pkt, bytes_per_pkt,
++			 eol_byte_num, pkt_per_line, reg, reg_ctrl, reg_ctrl2,
++			 dsc->slice_chunk_size,
++			 dsi_read(msm_host, REG_DSI_COMMAND_COMPRESSION_MODE_CTRL),
++			 dsi_read(msm_host, REG_DSI_COMMAND_COMPRESSION_MODE_CTRL2));
+ 	} else {
+ 		reg |= DSI_VIDEO_COMPRESSION_MODE_CTRL_WC(bytes_per_pkt);
+ 		dsi_write(msm_host, REG_DSI_VIDEO_COMPRESSION_MODE_CTRL, reg);
