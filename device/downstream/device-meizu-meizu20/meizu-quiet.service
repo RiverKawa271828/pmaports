@@ -1,0 +1,11 @@
+[Unit]
+Description=Meizu20: keep console quiet for bring-up
+After=systemd-sysctl.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "echo 1 4 1 7 > /proc/sys/kernel/printk"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

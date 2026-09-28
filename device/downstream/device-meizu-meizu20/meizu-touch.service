@@ -1,0 +1,11 @@
+[Unit]
+Description=Meizu 20 touch: selective geni-i2c load (touch SE only; 880000.i2c lethal)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/meizu20/meizu-touch-load.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+[Unit]
+Description=Force s2idle (deep suspend hard-resets, mainline lacks MPM/AOSS)
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "echo s2idle > /sys/power/mem_sleep"
+[Install]
+WantedBy=multi-user.target

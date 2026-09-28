@@ -24,7 +24,7 @@ maintainer="ri <ri@example.com>"
 _flavor="meizu-meizu20"
 pkgname=linux-$_flavor
 pkgver=7.3.0_rc3
-pkgrel=19
+pkgrel=20
 pkgdesc="Mainline kernel for Meizu 20 (SM8550)"
 arch="aarch64"
 _carch="arm64"
@@ -55,6 +55,7 @@ source="
 	config-$_flavor.$arch
 	0001-arm64-dts-qcom-add-Meizu-20-m2381-device-tree.patch
 	0002-drm-panel-add-BOE-B5011A05-for-Meizu-20-m2381.patch
+	0009-panel-drop-compression-packet.patch
 "
 builddir="$srcdir/linux-$_commit"
 
@@ -114,4 +115,5 @@ sha512sums="
 cb42ab5e6c528a67ba352abbee8bdd0a405e8762acfd8f18cd8c5d42a74c851f1b176833989b5c1bc9dedb062b327aaf34ccb0aaa102ac0dfbcda34e2d35d268  config-meizu-meizu20.aarch64
 a63436b1d7e6d7acc43b8c59ac172d7a2289010ab9de2b0b7af7cb9d77327b1e9a6f5cef21d8b0cda95a8c61375a88a8b00227a56ac3b0a0e3cddde6794081a1  0001-arm64-dts-qcom-add-Meizu-20-m2381-device-tree.patch
 c3af326792dff42554f4aca0208e82c23ecd591517cee5bf3dbfb5f7a04c6ee319f1e4234c64de103ca3b215c63d41a4b4ce3934d813d47b5e3664db2667041d  0002-drm-panel-add-BOE-B5011A05-for-Meizu-20-m2381.patch
+1047543b0f3506ed65fed895efdf375db3ea28cfccabe157b40dbf717d399567e104fbf32d513ca9cc564c68ba13127a741a70381f06d25d8bbe6c51971f486d  0009-panel-drop-compression-packet.patch
 "

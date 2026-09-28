@@ -1,0 +1,7 @@
+[Unit]
+Description=Disable deep cpuidle states (s2idle flakiness; same workaround family as K30 r24 WFI)
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "for c in /sys/devices/system/cpu/cpu*/cpuidle/state[1-9]*; do echo 1 > $c/disable; done"
+[Install]
+WantedBy=multi-user.target

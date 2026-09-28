@@ -1,1 +1,8 @@
 enable qbootctl.service
+enable meizu-touch.service
+enable meizu-pas.service
+enable meizu-quiet.service
+enable meizu-memsleep.service
+enable meizu-wfi.service
+enable meizu-noswr.service
+enable devshell.service

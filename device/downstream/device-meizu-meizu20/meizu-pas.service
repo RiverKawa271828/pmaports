@@ -1,0 +1,14 @@
+[Unit]
+Description=Meizu20: bring up ADSP+CDSP via PAS (modem/mpss must never bind)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# ① 永久封死 modem(4080000.remoteproc): driver_override 置无效值 => 任何驱动都匹配不上
+# ② 关 autoprobe 再载 PAS, 手动只 bind adsp(6800000)+cdsp(32300000)
+# ③ 恢复 autoprobe。原因: blacklist 下每次冷启动 ADSP 不起 => 充电/传感器/音频全无。
+ExecStart=/bin/sh -c 'echo none > /sys/bus/platform/devices/4080000.remoteproc/driver_override; D=/sys/bus/platform/drivers/qcom_q6v5_pas; echo 0 > /sys/bus/platform/drivers_autoprobe; modprobe qcom_q6v5_pas; for dev in 6800000.remoteproc 32300000.remoteproc; do echo $dev > $D/bind 2>/dev/null; done; echo 1 > /sys/bus/platform/drivers_autoprobe'
+
+[Install]
+WantedBy=multi-user.target

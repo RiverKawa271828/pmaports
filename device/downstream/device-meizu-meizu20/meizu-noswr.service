@@ -1,0 +1,12 @@
+[Unit]
+Description=Meizu20: unbind SWR master (interrupt storm until audio bring-up)
+DefaultDependencies=no
+After=sysinit.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "echo 6d30000.soundwire > /sys/bus/platform/drivers/qcom-soundwire/unbind 2>/dev/null || true"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
