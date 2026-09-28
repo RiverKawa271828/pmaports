@@ -1,0 +1,14 @@
+[Unit]
+Description=Mark current boot as successful in the A/B GPT slot attributes
+# 根治 ABL 重试计数耗尽落 fastboot (AGENTS ⑧): ABL 的 trial 计数在 boot_x 的
+# GPT entry 属性位 (successful/tries/active), 不在 misc - misc 清零无效。
+# qbootctl -m 走 GPT 属性位; 当前槽检测无 androidboot.slot_suffix 时回退读
+# GPT active 位 (bootctrl_impl.c get_current_or_active_slot), 本链 set_active b
+# 已置位, 无需改内核 cmdline。上游用法 = Fairphone FP4 soc-qcom-qbootctl。
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/qbootctl -m
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

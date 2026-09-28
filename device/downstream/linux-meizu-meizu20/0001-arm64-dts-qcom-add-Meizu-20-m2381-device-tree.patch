@@ -1,18 +1,18 @@
 diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
-index e5db19f..63ed9af 100644
+index e5db19fc346e..f60119eae154 100644
 --- a/arch/arm64/boot/dts/qcom/Makefile
 +++ b/arch/arm64/boot/dts/qcom/Makefile
-@@ -391,6 +391,7 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-hdk-display-card.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-hdk-rear-camera-card.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-hdk.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-mtp.dtb
-+dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-meizu-20.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-qrd.dtb
+@@ -395,6 +395,7 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-qrd.dtb
  dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-samsung-q5q.dtb
  dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-sony-xperia-yodo-pdx234.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-meizu-20-inf.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-meizu-20.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= sm8650-ayaneo-pocket-s2.dtb
+ 
+ sm8650-hdk-display-card-dtbs	:= sm8650-hdk.dtb sm8650-hdk-display-card.dtbo
 diff --git a/arch/arm64/boot/dts/qcom/sm8550-meizu-20.dts b/arch/arm64/boot/dts/qcom/sm8550-meizu-20.dts
 new file mode 100644
-index 0000000..a61d139
+index 000000000000..3444710f5839
 --- /dev/null
 +++ b/arch/arm64/boot/dts/qcom/sm8550-meizu-20.dts
 @@ -0,0 +1,1776 @@
@@ -1011,8 +1011,8 @@ index 0000000..a61d139
 +		avdd-supply = <&vreg_l14b_3p2>;
 +		vddio-supply = <&vreg_l12b_1p8>;
 +
-+		touchscreen-size-x = <1368>;
-+		touchscreen-size-y = <3192>;
++		touchscreen-size-x = <1080>;
++		touchscreen-size-y = <2400>;
 +	};
 +};
 +

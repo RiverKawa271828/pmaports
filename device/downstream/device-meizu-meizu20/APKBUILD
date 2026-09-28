@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=2
+pkgrel=3
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -36,16 +36,26 @@ options="!check !archcheck"
 # The "developer" default profile keeps USB networking enabled out of the box
 # (the charging profile requires enabling it manually, which is useless on a
 # headless bring-up device).
+# qbootctl (r3): marks the boot successful in the boot_x GPT attribute bits so
+# the ABL trial counter stops burning down to fastboot. The ABL retry state
+# lives in GPT entry attrs (successful/tries/active), NOT in misc - misc
+# zeroing never fixed it. Binary comes from Alpine community/qbootctl
+# (0.2.2); the unit + preset are ours. Slot detection without
+# androidboot.slot_suffix falls back to the GPT active bit, which
+# `fastboot set_active b` already set - no kernel cmdline change needed.
 depends="
 	linux-meizu-meizu20
 	postmarketos-base
 	postmarketos-usb-moded
 	postmarketos-usb-moded-default-profile-developer
+	qbootctl
 "
 makedepends="devicepkg-dev"
 source="
 	deviceinfo
 	modprobe.conf
+	qbootctl.service
+	80-device-meizu-meizu20.preset
 "
 
 build() {
@@ -56,9 +66,15 @@ package() {
 	devicepkg_package $startdir $pkgname
 	install -Dm644 "$srcdir/modprobe.conf" \
 		"$pkgdir"/etc/modprobe.d/50-meizu20-blacklist.conf
+	install -Dm644 "$srcdir/qbootctl.service" \
+		"$pkgdir"/usr/lib/systemd/system/qbootctl.service
+	install -Dm644 "$srcdir/80-device-meizu-meizu20.preset" \
+		"$pkgdir"/usr/lib/systemd/system-preset/80-device-meizu-meizu20.preset
 }
 
 sha512sums="
 c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e3f5014f69f7dbde9e2e0810a5917bfe0e9b87064eeba2feb  deviceinfo
 be3b0c0c5b4912771ca688d735f29f392028a9c2c02d1d2fed88eff17ca6bd7ac9d415e3a66194db3045c9b3a21bd53645df653af430741c7d0bafc71c747cdd  modprobe.conf
+c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl.service
+90b0d492a6f2ffeafeaab68b35ebea1239b2e36a3952f8aecfa06125e33263b934012341f4965351d1d9e53dd252832f9533864d52ae4f27c97a46ff91705dd1  80-device-meizu-meizu20.preset
 "
