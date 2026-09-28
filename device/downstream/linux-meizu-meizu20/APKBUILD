@@ -24,7 +24,7 @@ maintainer="ri <ri@example.com>"
 _flavor="meizu-meizu20"
 pkgname=linux-$_flavor
 pkgver=7.3.0_rc3
-pkgrel=17
+pkgrel=18
 pkgdesc="Mainline kernel for Meizu 20 (SM8550)"
 arch="aarch64"
 _carch="arm64"
@@ -55,10 +55,6 @@ source="
 	config-$_flavor.$arch
 	0001-arm64-dts-qcom-add-Meizu-20-m2381-device-tree.patch
 	0002-drm-panel-add-BOE-B5011A05-for-Meizu-20-m2381.patch
-	0003-panel-diag-dcs-io-v2.patch
-	0006-diag-dpu-dsc.patch
-	0007-diag-dsi-dsc.patch
-	0008-diag-dpu-dsc12.patch
 "
 builddir="$srcdir/linux-$_commit"
 
@@ -115,11 +111,7 @@ package() {
 
 sha512sums="
 399201f1c46562fcc1f372c751a35f20cace6d3891b31041dc3ba3a3d6e5e869d2692b21d5bc664c72648af61bb826647c3dcd76b115753ec00a0de8581fc435  linux-meizu-meizu20-v7.3.0_rc3.tar.gz
-3044c4184a6c111ff108b0b2832893591557f462909da67bed57221829f78df73844266470e3b02815cda2a7528856b35a7b200156e127009162634d3050ae09  config-meizu-meizu20.aarch64
+6cea5f95b1941e6dc7117ce85993ed706fb2f4636cef6e6afe850b764acebbce69ea51b053521e31f9496f3336c90e72d6cde0289121af9b3ab5cbc5fe125b7a  config-meizu-meizu20.aarch64
 a63436b1d7e6d7acc43b8c59ac172d7a2289010ab9de2b0b7af7cb9d77327b1e9a6f5cef21d8b0cda95a8c61375a88a8b00227a56ac3b0a0e3cddde6794081a1  0001-arm64-dts-qcom-add-Meizu-20-m2381-device-tree.patch
 c3af326792dff42554f4aca0208e82c23ecd591517cee5bf3dbfb5f7a04c6ee319f1e4234c64de103ca3b215c63d41a4b4ce3934d813d47b5e3664db2667041d  0002-drm-panel-add-BOE-B5011A05-for-Meizu-20-m2381.patch
-fe010e245f05d08454e6e8f199179842ea1ec94084cdcbe77e12d73f1861f2735cf8f3c2e12791631c0662e71b1545c687f37ca836e091bd48fd8059bb14f175  0003-panel-diag-dcs-io-v2.patch
-8e2f18be7d16ffc1fc34c997ed4a09664b24dec27f8614db6121070af335a793ae3e58f326989367c43ebe3720189d68a10686eeaf014b7d545a917acac19b62  0006-diag-dpu-dsc.patch
-f204f39d1ee47fd69515065cd137e39ef34f4df6f27977a66968034bbef4549a397cf5524c86684dc6a990f9734d3a5f2effc69bec04f3b24fafa061736ee67c  0007-diag-dsi-dsc.patch
-861c2edcdc48fff2ad385553da35168b8ef4984921ab0b4a756e1bbad5229919f6078154e340a667b8ed38707bef17c103da550460a238c9b17b4af06fbee3ef  0008-diag-dpu-dsc12.patch
 "

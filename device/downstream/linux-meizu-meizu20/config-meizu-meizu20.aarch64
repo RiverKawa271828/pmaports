@@ -599,7 +599,7 @@ CONFIG_ARM64_CONTPTE=y
 # Boot options
 #
 # CONFIG_ARM64_ACPI_PARKING_PROTOCOL is not set
-CONFIG_CMDLINE="earlycon=efifb console=ttyMSM0,115200n8 qcom_geni_serial.con_enabled=1 console=tty1 root=/dev/sda22 rootwait rw loglevel=7 fw_devlink=off clk_ignore_unused pd_ignore_unused icc-rpmh.qos_disable=1 icc_rpmh_qos_disable=1 sysrq_always_enabled oops=panic pmos.debug-shell"
+CONFIG_CMDLINE="earlycon=efifb console=ttyMSM0,115200n8 qcom_geni_serial.con_enabled=1 console=tty1 root=/dev/sda22 rootwait rw loglevel=3 fw_devlink=off clk_ignore_unused pd_ignore_unused icc-rpmh.qos_disable=1 icc_rpmh_qos_disable=1 sysrq_always_enabled oops=panic pmos.debug-shell"
 # CONFIG_CMDLINE_FROM_BOOTLOADER is not set
 # CONFIG_CMDLINE_FORCE is not set
 CONFIG_EFI_STUB=y
