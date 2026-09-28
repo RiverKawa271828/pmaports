@@ -24,7 +24,7 @@ maintainer="ri <ri@example.com>"
 _flavor="meizu-meizu20"
 pkgname=linux-$_flavor
 pkgver=7.3.0_rc3
-pkgrel=16
+pkgrel=17
 pkgdesc="Mainline kernel for Meizu 20 (SM8550)"
 arch="aarch64"
 _carch="arm64"
@@ -95,6 +95,13 @@ package() {
 		[ -e "$f" ] || continue
 		cp "$f" "$pkgdir"/boot/vmlinuz
 	done
+
+	# ESP/EFI-stub delivery: also ship the zboot PE (CONFIG_EFI_ZBOOT=y),
+	# self-decompressing ~15MB BOOTAA64.EFI for the mars UEFI chain
+	if [ -f "$builddir"/arch/arm64/boot/vmlinuz.efi ]; then
+		cp "$builddir"/arch/arm64/boot/vmlinuz.efi \
+			"$pkgdir"/boot/vmlinuz-efi
+	fi
 
 	rm -f "$pkgdir"/lib/modules/*/build "$pkgdir"/lib/modules/*/source
 
