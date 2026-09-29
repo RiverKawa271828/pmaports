@@ -1,0 +1,47 @@
+From: Shenghan Gao <gsh20040816@gmail.com>
+Subject: [backport] wifi: ath12k: fix frequency range for single-pdev devices
+
+Upstream fix (ath-current, lore 20260715065218.41232-1): on single-pdev
+devices (WCN7850/kiwi) the 5GHz branch of ath12k_regd_update() was skipped
+whenever supports_6ghz was set, and the 6GHz fallback intersected the 5GHz
+hardware capability with reg_freq_6ghz.  For countries without 6GHz rules
+(eg CN) freq_high collapses to 0, ath12k_mac_update_freq_range() silently
+early-returns, and ar->freq_range stays 2402-2482.  build_chan_list then
+filters every 5GHz channel out of the WMI channel list and the firmware
+rejects all 5GHz scans with WMI_SCAN_REASON_INTERNAL_FAILURE while 2.4GHz
+keeps working.
+
+Fix: use the proper nl80211 band indices (the WMI_*_CAP bits were being
+used as array indexes) and let single_pdev_only devices take the 5GHz
+branch so the range is computed from the real 5GHz rules.
+
+Rebuilt locally against 7.3.0-rc3 (silime tree @3a94ad18d21d); hunks land
+at the same offsets as upstream.  Local hard evidence: m2381 (WCN7850
+hw2.0) scan trigger on ch36/ch161 = 4/4 "scan event start failed reason 4"
+while 2.4G channels complete normally.
+Ref: https://lore.kernel.org/linux-wireless/20260715065218.41232-1-gsh20040816@gmail.com/
+Fixes: 0d777aa2ca77 ("wifi: ath12k: fix mac pdev frequency range update")
+--- a/drivers/net/wireless/ath/ath12k/reg.c
++++ b/drivers/net/wireless/ath/ath12k/reg.c
+@@ -300,7 +300,7 @@
+ 
+ 	if (supported_bands & WMI_HOST_WLAN_2GHZ_CAP) {
+ 		if (ab->hw_params->single_pdev_only) {
+-			phy_id = ar->pdev->cap.band[WMI_HOST_WLAN_2GHZ_CAP].phy_id;
++			phy_id = ar->pdev->cap.band[NL80211_BAND_2GHZ].phy_id;
+ 			reg_cap = &ab->hal_reg_cap[phy_id];
+ 		}
+ 
+@@ -310,9 +310,10 @@
+ 		ath12k_mac_update_freq_range(ar, freq_low, freq_high);
+ 	}
+ 
+-	if (supported_bands & WMI_HOST_WLAN_5GHZ_CAP && !ar->supports_6ghz) {
++	if (supported_bands & WMI_HOST_WLAN_5GHZ_CAP &&
++	    (!ar->supports_6ghz || ab->hw_params->single_pdev_only)) {
+ 		if (ab->hw_params->single_pdev_only) {
+-			phy_id = ar->pdev->cap.band[WMI_HOST_WLAN_5GHZ_CAP].phy_id;
++			phy_id = ar->pdev->cap.band[NL80211_BAND_5GHZ].phy_id;
+ 			reg_cap = &ab->hal_reg_cap[phy_id];
+ 		}
+ 

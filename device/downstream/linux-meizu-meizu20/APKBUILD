@@ -24,7 +24,7 @@ maintainer="ri <ri@example.com>"
 _flavor="meizu-meizu20"
 pkgname=linux-$_flavor
 pkgver=7.3.0_rc3
-pkgrel=32
+pkgrel=33
 pkgdesc="Mainline kernel for Meizu 20 (SM8550)"
 arch="aarch64"
 _carch="arm64"
@@ -58,6 +58,7 @@ source="
 	0009-panel-drop-compression-packet.patch
 	0010-panel-m3-keep-rails.patch
 	0011-panel-diag-r22-session-knobs.patch
+	0012-wifi-ath12k-fix-freq-range-single-pdev.patch
 "
 builddir="$srcdir/linux-$_commit"
 
@@ -120,4 +121,5 @@ c3af326792dff42554f4aca0208e82c23ecd591517cee5bf3dbfb5f7a04c6ee319f1e4234c64de10
 1047543b0f3506ed65fed895efdf375db3ea28cfccabe157b40dbf717d399567e104fbf32d513ca9cc564c68ba13127a741a70381f06d25d8bbe6c51971f486d  0009-panel-drop-compression-packet.patch
 b6b445613d841fc7074d8b8e1cd735e3b168ed917cd75f7265001324c5e7394cbed2f4ace1706c96a0c9651a67fea74bbc4794226d1c41b7d35b0bd294023c9b  0010-panel-m3-keep-rails.patch
 bf2dec34e2ddd1f515d80838e9e49a8eb3a8e7a65b354d00f4cf788da3767582fb0ea3e286cd487076b441d8e65795486530bf92ae44bad00c0da8cfa09dad01  0011-panel-diag-r22-session-knobs.patch
+ac5a42de1f444492f0c63d955e96cd200c7703c9cd1613cdd67dead8465c56853f8d640a74347df9d6c239a7f02d4a8ec2dde2cd4ee6ee1426679272c781b847  0012-wifi-ath12k-fix-freq-range-single-pdev.patch
 "
