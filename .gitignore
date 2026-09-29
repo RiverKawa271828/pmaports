@@ -122,3 +122,4 @@ ENV/
 
 # child pipeline
 .ci/build-jobs.yaml
+device/downstream/linux-meizu-meizu20/*.tar.gz

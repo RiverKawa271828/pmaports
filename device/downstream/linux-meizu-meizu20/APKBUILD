@@ -24,7 +24,7 @@ maintainer="ri <ri@example.com>"
 _flavor="meizu-meizu20"
 pkgname=linux-$_flavor
 pkgver=7.3.0_rc3
-pkgrel=33
+pkgrel=34
 pkgdesc="Mainline kernel for Meizu 20 (SM8550)"
 arch="aarch64"
 _carch="arm64"
@@ -47,20 +47,23 @@ makedepends="
 	zstd
 	"
 
-# silime/linux 7.3.0-dev baseline the DTS patch applies to
+# fork phase-1 (2026-09-30): source = LOCAL tarball of our fork tree
+# (~/work/linux-mobile-ports, branch meizu20/7.3 @ torvalds base
+# 587858367581 + carry list). Regenerate with:
+#   git -C ~/work/linux-mobile-ports archive --format=tar.gz \
+#     --prefix=linux-meizu-meizu20-fork-v$pkgver/ meizu20/7.3
+# Phase-2 switches source to the published fork git URL. silime _commit
+# kept below for provenance.
 _commit="3a94ad18d21de4c685c05937fb646517943910a1"
 
 source="
-	$pkgname-v$pkgver.tar.gz::$url/archive/$_commit.tar.gz
+	linux-meizu-meizu20-fork-v$pkgver.tar.gz
 	config-$_flavor.$arch
-	0001-arm64-dts-qcom-add-Meizu-20-m2381-device-tree.patch
-	0002-drm-panel-add-BOE-B5011A05-for-Meizu-20-m2381.patch
-	0009-panel-drop-compression-packet.patch
-	0010-panel-m3-keep-rails.patch
-	0011-panel-diag-r22-session-knobs.patch
-	0012-wifi-ath12k-fix-freq-range-single-pdev.patch
 "
-builddir="$srcdir/linux-$_commit"
+# NOTE: the five patches (0001/0002/0009/0010/0011/0012) are NOT listed
+# anymore — the fork tarball already contains them as real commits
+# (see docs/meizu20/silime-exit-carry-list.md §7).
+builddir="$srcdir/linux-meizu-meizu20-fork-v$pkgver"
 
 prepare() {
 	default_prepare
@@ -114,12 +117,6 @@ package() {
 }
 
 sha512sums="
-399201f1c46562fcc1f372c751a35f20cace6d3891b31041dc3ba3a3d6e5e869d2692b21d5bc664c72648af61bb826647c3dcd76b115753ec00a0de8581fc435  linux-meizu-meizu20-v7.3.0_rc3.tar.gz
+a279e35c4405f85d6c5d7d13a347a6a863e880617c496ab60ec7bff7f141e1644359cbe3f912450d9e83e5e0b7e0f0f3c7e72a099522adb2508ca616efbc1b97  linux-meizu-meizu20-fork-v7.3.0_rc3.tar.gz
 af91676a3e4240dbdd9c6b3d270c25ced4e7e0096cc2895175a783ce4a8d78187560c999ad17d73bbf203e7e784a0ccaedf793ae3d22e8c13bb695f1a4d8b1c7  config-meizu-meizu20.aarch64
-a63436b1d7e6d7acc43b8c59ac172d7a2289010ab9de2b0b7af7cb9d77327b1e9a6f5cef21d8b0cda95a8c61375a88a8b00227a56ac3b0a0e3cddde6794081a1  0001-arm64-dts-qcom-add-Meizu-20-m2381-device-tree.patch
-c3af326792dff42554f4aca0208e82c23ecd591517cee5bf3dbfb5f7a04c6ee319f1e4234c64de103ca3b215c63d41a4b4ce3934d813d47b5e3664db2667041d  0002-drm-panel-add-BOE-B5011A05-for-Meizu-20-m2381.patch
-1047543b0f3506ed65fed895efdf375db3ea28cfccabe157b40dbf717d399567e104fbf32d513ca9cc564c68ba13127a741a70381f06d25d8bbe6c51971f486d  0009-panel-drop-compression-packet.patch
-b6b445613d841fc7074d8b8e1cd735e3b168ed917cd75f7265001324c5e7394cbed2f4ace1706c96a0c9651a67fea74bbc4794226d1c41b7d35b0bd294023c9b  0010-panel-m3-keep-rails.patch
-bf2dec34e2ddd1f515d80838e9e49a8eb3a8e7a65b354d00f4cf788da3767582fb0ea3e286cd487076b441d8e65795486530bf92ae44bad00c0da8cfa09dad01  0011-panel-diag-r22-session-knobs.patch
-ac5a42de1f444492f0c63d955e96cd200c7703c9cd1613cdd67dead8465c56853f8d640a74347df9d6c239a7f02d4a8ec2dde2cd4ee6ee1426679272c781b847  0012-wifi-ath12k-fix-freq-range-single-pdev.patch
 "
