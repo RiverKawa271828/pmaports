@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=7
+pkgrel=8
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -59,6 +59,15 @@ options="!check !archcheck"
 # wrong, tfa9875 fictional). Flyme volume point translated to the
 # mainline cs35l45 control domain, conservative start (no DSP firmware
 # in mainline = no speaker protection). + meizu-bind-988000.sh packaged.
+# r8: audio front round. i2c10/888000 amp bind persisted as
+# meizu-amps.service (After=meizu-touch.service - the drivers_autoprobe
+# race family must stay serialized: pas -> touch -> amps -> retimer);
+# 988000 retimer bind unitized as meizu-retimer.service. AudioReach
+# topology MEIZU20Inf-tplg.bin installed to /usr/lib/firmware/qcom/sm8550/
+# (kernel requests exactly this path: sc8280xp.c driver_name "sm8550" x
+# DTS model "MEIZU20Inf"); without it q6apm's component probe fails and
+# the card cannot register. Built from meizu20-m1/audio-topology/
+# meizu20.m4 (audioreach-topology pin b4c1510) - keep source and bin in sync.
 depends="
 	linux-meizu-meizu20
 	postmarketos-base
@@ -75,8 +84,11 @@ source="
 	qbootctl.service
 	80-device-meizu-meizu20.preset
 	meizu-touch-load.sh
+	meizu-amps-load.sh
 	meizu-bind-988000.sh
 	meizu-touch.service
+	meizu-amps.service
+	meizu-retimer.service
 	meizu-pas.service
 	meizu-noswr.service
 	meizu-quiet.service
@@ -85,6 +97,7 @@ source="
 	devshell.service
 	MEIZU20Inf.conf
 	HiFi.conf
+	MEIZU20Inf-tplg.bin
 "
 
 build() {
@@ -97,12 +110,16 @@ package() {
 		"$pkgdir"/etc/modprobe.d/50-meizu20-blacklist.conf
 	install -Dm755 "$srcdir/meizu-touch-load.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-touch-load.sh
+	# r8: i2c10/888000 amp bind (CS35L45 x2), meizu-amps.service.
+	install -Dm755 "$srcdir/meizu-amps-load.sh" \
+		"$pkgdir"/usr/lib/meizu20/meizu-amps-load.sh
 	# r7: 988000 (i2c_hub_2) safe-bind helper (whitelist candidate, U3
-	# round 2026-09-30). Manual run, session-only. 880000 stays lethal.
+	# round 2026-09-30); unitized by r8 meizu-retimer.service.
+	# 880000 stays lethal.
 	install -Dm755 "$srcdir/meizu-bind-988000.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-bind-988000.sh
-	for u in qbootctl meizu-touch meizu-pas meizu-noswr meizu-quiet \
-		meizu-memsleep meizu-wfi devshell; do
+	for u in qbootctl meizu-touch meizu-amps meizu-retimer meizu-pas \
+		meizu-noswr meizu-quiet meizu-memsleep meizu-wfi devshell; do
 		install -Dm644 "$srcdir/$u.service" \
 			"$pkgdir"/usr/lib/systemd/system/$u.service
 	done
@@ -118,16 +135,23 @@ package() {
 	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/conf.d/sm8550
 	ln -s ../../Qualcomm/sm8550/MEIZU20Inf.conf \
 		"$pkgdir"/usr/share/alsa/ucm2/conf.d/sm8550/MEIZU20Inf.conf
+	# r8: AudioReach topology (q6apm component probe requests it; missing
+	# file = component fails = no card). Path is a kernel-side contract.
+	install -Dm644 "$srcdir/MEIZU20Inf-tplg.bin" \
+		"$pkgdir"/usr/lib/firmware/qcom/sm8550/MEIZU20Inf-tplg.bin
 }
 
 sha512sums="
 c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e3f5014f69f7dbde9e2e0810a5917bfe0e9b87064eeba2feb  deviceinfo
 96d1f86ff0f64f31a6da123eeff1944e287ce578c29a3a9cae77e00cabb2ed633bb6c433abb728ebcd3030e3b74ab7357ae090af8f8fa5c2c6f7fd0c6868bfa6  modprobe.conf
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl.service
-26f46f2b490017a33e9ef692d033b0b169a2397dff2396749d222169ac00f5a1a076b7fa1e77c75deaccdbc12b4cc0a98f0119a8b2b6a26bbed81e312fa04e67  80-device-meizu-meizu20.preset
+b15b4390111c9c6aaf78302a9631f71cdfa5ffe2c453340437d528fee0400717dbcb2ee2c663fb38c56a73c62f4d4510f02f51b27e11115dfe08f450fd67f32b  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
+48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 99d4196b2043876d2affc526e25a7f5df33c5472bb7c9d959fdb869b247cb31d75a3ff3834d866f591644deac3fb01be2b51119fd5a9e20237768a06e3d42a22  meizu-bind-988000.sh
 cecf7d3c2dd3eff32e4168d547eefc2e8dcc8cf89b4fd1317d55a88b75dac38c40024c800be9f81e36e465694e7113e0f9928d1ec08ac21ae76dc36ec30824df  meizu-touch.service
+b568645243ffcb1d42c2990a7ae44223172d02ea64cb296caaa07af96b94c1a04341df3f76f07961b2ffb8aeaf19edcf1482c3c0196c005a1346e25986502536  meizu-amps.service
+1f07fcc711d36b379ffd3c85c44011e0f48e97d9837e0af1a44a7472378f35dbe08f1b3bfe783bcf18a257dc76005be4e0124f12aed58a13c401d8b82edeff9d  meizu-retimer.service
 b004796bd49c7b73a1e51cbb75559e88f6e89ffc0c049331adc9836e82d38c6d7c26d5d76ac68ee2bd8028109fc576fd2ece92a285b8936e84ef11dbf1c8e47e  meizu-pas.service
 742ba2dd20f04133361adb1574f17eb7631ea3099e17e8ee2925001a675e0347c5c30a9e073343b1d38dffc367d23d809eb6ed2f091f2e5c61a45dd637c97774  meizu-noswr.service
 af0221ede8c923a5556a43e5ce95643e3a43abd84267ba61c48e39b88f1a1e6bc835fbfb29fb0cc1dfa15b207d37783965e974be4d97df7780b14d5c5ba7a5c0  meizu-quiet.service
@@ -135,5 +159,6 @@ af0221ede8c923a5556a43e5ce95643e3a43abd84267ba61c48e39b88f1a1e6bc835fbfb29fb0cc1
 64d14d53c7f4f213bb3caab6053b57501ae59c10fe1104f697380b623410d4cff757352ab1a82a4c0ab19b7691cb57087ef7c62613cf8e0f338bb0f72aeb079e  meizu-wfi.service
 1b110900f88d609d8e555102c653bb21948149db6c9d07547b8d5e4de1f4ece4204ae5c85a027f6654a9b72ccddbc5668183c7845cb95c7dd74030397788dfc7  devshell.service
 dbdc78f0da5e9c69fd2290a7c27cfd6d8ea92f934e765c5aacc632b6a610134e3a6dfe67ef952c536096073a774772d9a2a84f6517ccf7cd00a980eb9a114abb  MEIZU20Inf.conf
-657fbe1f8bcd7e6e2b28c54e29e81b6d415f43179dff3ca21f08d0bce29e9d1c80af291ec21609b10c534783bc58aaccef1c739ded5c41ed022bc02f98112f77  HiFi.conf
+d6e878242fff12fe6d53fc27aecbf4ac0b0d4e0742bb730b128fcbfcdf93355fa1edb11f56b8361e8ff65bee871a39bb0bfb57030b68d07d9c7c195df5e71f79  HiFi.conf
+8d9b27d6164bba1f090adabaed43c6dd7116c1bc7bcd3dec450c6658be11d5d701b7329f43700b8f23b72661a1f60ee295fb805d80ded819c3fc43f4a0d16717  MEIZU20Inf-tplg.bin
 "

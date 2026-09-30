@@ -1,0 +1,16 @@
+[Unit]
+Description=Meizu 20 typec retimer: selective geni-i2c load (988000, nb7vpq904m)
+# 2026-09-30 U3 verdict: 988000.i2c is safe (whitelist candidate) -
+# nb7vpq904m retimer binds ("inverted data lanes mapping"). Retimer =
+# candidate fix for the NCM drop-out family (pmic_glink_altmode deferred);
+# improvement verification waits for a plug-in day.
+# Autoprobe race family: last in the pas -> touch -> amps -> retimer chain.
+After=multi-user.target meizu-pas.service meizu-touch.service meizu-amps.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/meizu20/meizu-bind-988000.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

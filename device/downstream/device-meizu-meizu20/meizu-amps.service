@@ -1,0 +1,14 @@
+[Unit]
+Description=Meizu 20 amps: selective geni-i2c load (i2c10/888000, CS35L45 x2; 880000.i2c lethal)
+# Autoprobe race family (see meizu-touch.service): every service that
+# toggles the global drivers_autoprobe must serialize. Chain:
+# meizu-pas -> meizu-touch -> meizu-amps -> meizu-retimer.
+After=multi-user.target meizu-pas.service meizu-touch.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/meizu20/meizu-amps-load.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
