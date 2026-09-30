@@ -1,6 +1,11 @@
 [Unit]
 Description=Meizu 20 touch: selective geni-i2c load (touch SE only; 880000.i2c lethal)
 After=multi-user.target
+# r22 定案（2026-09-29）: PAS 与本服务并发操作同一全局 drivers_autoprobe 开关。
+# PAS 尾部的 echo 1 一旦落进本服务的 echo 0 -> modprobe 窗口，geni 带着
+# autoprobe=1 注册 = 全 SE 附着 = 880000 外部 abort = boot panic（当日 3 次）。
+# 串行化：等 PAS 完全结束（它留下 autoprobe=1，本服务再压 0）。
+After=meizu-pas.service
 
 [Service]
 Type=oneshot
