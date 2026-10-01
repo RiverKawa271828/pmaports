@@ -4,6 +4,12 @@ UNIT_LIST_PATH=/var/lib/systemd-apk/installed.units
 
 pre_commit() {
 	mkdir -p "$(dirname "$UNIT_LIST_PATH")"
+	# treescan arrives with this very package on a fresh chroot; the hook
+	# fires at pre-commit when it is not there yet (upstream ordering bug,
+	# hit 2026-10-01: fresh rootfs install died with hook exit 127). Skip
+	# list rebuild until the binary exists - the systemd-apk trigger
+	# rebuilds it on the next transaction.
+	command -v treescan >/dev/null 2>&1 || return 0
 	treescan /usr/lib/systemd/system > "$UNIT_LIST_PATH"
 	treescan /usr/lib/systemd/user >> "$UNIT_LIST_PATH"
 }
