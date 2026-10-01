@@ -1,0 +1,14 @@
+[Unit]
+Description=Meizu 20 audio chain: ordered WCD9385 SWR + macro bring-up
+# Autoload is unreliable (modules load but never probe); see
+# meizu-audio-load.sh for the 2026-10-01 findings. Serialize on the
+# autoprobe chain and give the DSP (q6prm) time to be up.
+After=multi-user.target meizu-pas.service meizu-touch.service meizu-amps.service meizu-retimer.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/meizu20/meizu-audio-load.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

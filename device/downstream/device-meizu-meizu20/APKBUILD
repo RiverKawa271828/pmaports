@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=8
+pkgrel=9
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -85,9 +85,11 @@ source="
 	80-device-meizu-meizu20.preset
 	meizu-touch-load.sh
 	meizu-amps-load.sh
+	meizu-audio-load.sh
 	meizu-bind-988000.sh
 	meizu-touch.service
 	meizu-amps.service
+	meizu-audio.service
 	meizu-retimer.service
 	meizu-pas.service
 	meizu-noswr.service
@@ -113,13 +115,17 @@ package() {
 	# r8: i2c10/888000 amp bind (CS35L45 x2), meizu-amps.service.
 	install -Dm755 "$srcdir/meizu-amps-load.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-amps-load.sh
+	# r9: ordered WCD9385 SWR chain bring-up (autoload never probes),
+	# meizu-audio.service.
+	install -Dm755 "$srcdir/meizu-audio-load.sh" \
+		"$pkgdir"/usr/lib/meizu20/meizu-audio-load.sh
 	# r7: 988000 (i2c_hub_2) safe-bind helper (whitelist candidate, U3
 	# round 2026-09-30); unitized by r8 meizu-retimer.service.
 	# 880000 stays lethal.
 	install -Dm755 "$srcdir/meizu-bind-988000.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-bind-988000.sh
-	for u in qbootctl meizu-touch meizu-amps meizu-retimer meizu-pas \
-		meizu-noswr meizu-quiet meizu-memsleep meizu-wfi devshell; do
+	for u in qbootctl meizu-touch meizu-amps meizu-audio meizu-retimer \
+		meizu-pas meizu-noswr meizu-quiet meizu-memsleep meizu-wfi devshell; do
 		install -Dm644 "$srcdir/$u.service" \
 			"$pkgdir"/usr/lib/systemd/system/$u.service
 	done
