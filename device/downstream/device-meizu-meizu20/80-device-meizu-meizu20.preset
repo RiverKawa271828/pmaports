@@ -1,4 +1,4 @@
-enable qbootctl.service
+enable qbootctl-meizu.service
 enable meizu-touch.service
 enable meizu-amps.service
 enable meizu-audio.service

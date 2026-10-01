@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=9
+pkgrel=10
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -68,6 +68,9 @@ options="!check !archcheck"
 # DTS model "MEIZU20Inf"); without it q6apm's component probe fails and
 # the card cannot register. Built from meizu20-m1/audio-topology/
 # meizu20.m4 (audioreach-topology pin b4c1510) - keep source and bin in sync.
+# r10: qbootctl.service renamed qbootctl-meizu.service - upstream Alpine
+# qbootctl now ships a qbootctl-systemd subpackage owning the old path
+# (r9 rootfs install died on the overwrite conflict, 2026-10-01).
 # r9: 71-meizu20-fastrpc-rootpd.rules - udev SYSTEMD_WANTS for the ADSP
 # root-PD daemon, fired when /dev/fastrpc-adsp appears. DEPLOY WITH CARE:
 # meizu-audio.service is preset-enabled, so installing r9 makes the next
@@ -86,7 +89,7 @@ makedepends="devicepkg-dev"
 source="
 	deviceinfo
 	modprobe.conf
-	qbootctl.service
+	qbootctl-meizu.service
 	71-meizu20-fastrpc-rootpd.rules
 	80-device-meizu-meizu20.preset
 	meizu-touch-load.sh
@@ -130,7 +133,7 @@ package() {
 	# 880000 stays lethal.
 	install -Dm755 "$srcdir/meizu-bind-988000.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-bind-988000.sh
-	for u in qbootctl meizu-touch meizu-amps meizu-audio meizu-retimer \
+	for u in qbootctl-meizu meizu-touch meizu-amps meizu-audio meizu-retimer \
 		meizu-pas meizu-noswr meizu-quiet meizu-memsleep meizu-wfi devshell; do
 		install -Dm644 "$srcdir/$u.service" \
 			"$pkgdir"/usr/lib/systemd/system/$u.service
@@ -162,9 +165,9 @@ package() {
 sha512sums="
 c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e3f5014f69f7dbde9e2e0810a5917bfe0e9b87064eeba2feb  deviceinfo
 96d1f86ff0f64f31a6da123eeff1944e287ce578c29a3a9cae77e00cabb2ed633bb6c433abb728ebcd3030e3b74ab7357ae090af8f8fa5c2c6f7fd0c6868bfa6  modprobe.conf
-c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl.service
+c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-5cb072c8036961c8bf7860b041ec9ebaac37a6de36084f6bb385bf82217672430c08aa8990510447c1f1ec914d27aaedc5da403c1ed592fcc07b56412c58b56c  80-device-meizu-meizu20.preset
+13ec35480a230f591a773900b3522c5d82a690ffa8773eb77e12505f36b3cef82994d862f34d631321d0b698bf494b1cadf767d039b6801cf288a4013a4a4f3b  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 1962169e56aa87621d7dd71378c9af4e062e8fe5264a8bb0ea6f2a46a65411f698bc17e1472fd8d4eff42fb65f418a62f17e7721d0d8e4856426acfcf0488865  meizu-audio-load.sh
