@@ -1,0 +1,35 @@
+# TFTP server on AF_QIPCRTR: serves file requests from the remote
+# processors (modem/ADSP/CDSP).  On m2381 the ADSP writes its DSP-side
+# logs (audio_dsp_logs family) via WRQ to /readwrite/... -> /tmp/tqftpserv/
+# -- the only DSP-side observability channel we have.  Diagnostic staple
+# from the r37-era rootfs; re-packaged for the r12 image (temp/, 2026-10-02).
+maintainer="ri <ri@example.com>"
+pkgname=tqftpserv
+pkgver=1.0
+pkgrel=0
+pkgdesc="TFTP server for QRTR (serves file requests from Qualcomm remote processors)"
+url="https://github.com/linux-msm/tqftpserv"
+arch="all"
+license="BSD-3-Clause"
+makedepends="meson gcc musl-dev linux-headers zstd-dev qrtr-dev systemd-dev"
+source="tqftpserv-$pkgver.tar.gz"
+options="!check"
+builddir="$srcdir/tqftpserv-master"
+
+build() {
+	meson setup build \
+		--prefix=/usr \
+
+	ninja -C build
+}
+
+package() {
+	install -Dm755 build/tqftpserv -t "$pkgdir"/usr/bin/
+	install -d "$pkgdir"/usr/lib/systemd/system
+	sed "s|@prefix@|/usr|" "$builddir"/tqftpserv.service.in \
+		> "$pkgdir"/usr/lib/systemd/system/tqftpserv.service
+}
+
+sha512sums="
+032ef455e84c29be6523cd18df4aa5d72d4d786058f80b23f431120a07c4064b8dc1bf823f3be964c51438336ca782a6b40d75597c13d7c2aa536180a63fcfa0  tqftpserv-1.0.tar.gz
+"
