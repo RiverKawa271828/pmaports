@@ -123,3 +123,7 @@ ENV/
 # child pipeline
 .ci/build-jobs.yaml
 device/downstream/linux-meizu-meizu20/*.tar.gz
+
+# Local firmware/kernel tarballs (meizu20): huge proprietary blobs, paths
+# documented in the APKBUILD headers. Same policy as linux-meizu-meizu20.
+device/downstream/firmware-meizu-meizu20/*.tar.gz

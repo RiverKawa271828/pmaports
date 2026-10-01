@@ -10,5 +10,8 @@ Type=oneshot
 ExecStart=/usr/lib/meizu20/meizu-audio-load.sh
 RemainAfterExit=yes
 
-[Install]
-WantedBy=multi-user.target
+# No [Install]: the SWR CLASH storm means this chain must never start
+# automatically - a [Install] section + chroot reuse historically baked an
+# enabled symlink into images (2026-10-02 complete-image round). Audio
+# device days start it by hand: systemctl start meizu-audio.service.
+

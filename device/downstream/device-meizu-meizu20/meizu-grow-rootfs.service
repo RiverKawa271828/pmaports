@@ -1,0 +1,11 @@
+[Unit]
+Description=Meizu20: grow the root ext4 to fill the userdata partition (pmbootstrap images are sized ~4G; userdata is 464G)
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'dev=/dev/disk/by-partlabel/userdata; [ -e "$dev" ] || exit 0; cur=$(dumpe2fs -h "$dev" 2>/dev/null | sed -n "s/^Block count: *//p"); max=$(( $(blockdev --getsize64 "$dev") / 4096 )); if [ -n "$cur" ] && [ "$cur" -lt "$max" ]; then resize2fs "$dev"; fi'
+
+[Install]
+WantedBy=multi-user.target

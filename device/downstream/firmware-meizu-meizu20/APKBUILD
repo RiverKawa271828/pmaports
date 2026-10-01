@@ -1,0 +1,41 @@
+# Firmware for Meizu 20 (m2381, SM8550 / kalama). Flash a pmOS image and
+# every loadable blob is on disk - no manual /lib/firmware top-ups.
+#
+# Tarball layout (lib/firmware/...), assembled 2026-10-02 from the two
+# verified sources (md5-checked on device the same day):
+#   qcom/   <- vendor-fw-harvest mainline tree (meizu20_linux):
+#              GPU a740_sqe/zap + gmu, adsp/cdsp/modem split fw (DTS paths
+#              qcom/sm8550/meizu/*), ipa, vpu. vpu30_4v.mbn is NOT the
+#              vpu30_p4.mbn the iris driver asks for - video decode stays
+#              unverified, do not alias the names.
+#   ath12k/ <- silime meizu-20-inf-firmware (mainline naming; the set the
+#              现网5G verified days ran): WCN7850 hw2.0 amss/board-2/m3
+#              (ee2f1a64/89416473/88c1590d) + ncm865.
+#   qca/    <- vendor-fw-harvest mainline tree: hmtbtfw20.tlv (26d7ca70)
+#              + hmtnv20.* NVRAM family for the WCN7850 BT side.
+# Userspace DSP files (silime hexagonfs/, /usr/share/qcom) deliberately
+# NOT shipped: never verified on this device - revisit with the SPF
+# audio front, don't grow the known-good baseline blind.
+# regulatory.db comes from wireless-regdb (base image already has it).
+maintainer="ri <ri@example.com>"
+pkgname=firmware-meizu-meizu20
+pkgver=1
+pkgrel=1
+pkgdesc="Firmware for Meizu 20 (meizu_20_CN, SM8550 / kalama)"
+url="https://postmarketos.org"
+arch="aarch64"
+license="proprietary"
+options="!check !strip !archcheck !tracedeps pmb:cross-native"
+
+source="
+	firmware-meizu-meizu20.tar.gz
+"
+
+package() {
+	mkdir -p "$pkgdir"
+	cp -a "$srcdir"/lib "$pkgdir"/
+}
+
+sha512sums="
+fff2ff4605b846d1e41998f01c7400ad95d3149b3f8334f7f6e24f183d63c948eb87f9015598b7effae14185c1c8de78c80fce047fce7b44d58c79929971fc1f  firmware-meizu-meizu20.tar.gz
+"

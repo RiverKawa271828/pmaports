@@ -1,11 +1,15 @@
 enable qbootctl-meizu.service
 enable meizu-touch.service
 enable meizu-amps.service
-enable meizu-audio.service
+# r11: audio chain starts MANUAL only - default boot must be silent (SWR
+# CLASH unresolved; the old per-rootfs fuse dance is replaced by this
+# disable). Audio device days: systemctl start meizu-audio.service.
+disable meizu-audio.service
 enable meizu-retimer.service
 enable meizu-pas.service
 enable meizu-quiet.service
 enable meizu-memsleep.service
 enable meizu-wfi.service
 enable meizu-noswr.service
+enable meizu-grow-rootfs.service
 enable devshell.service
