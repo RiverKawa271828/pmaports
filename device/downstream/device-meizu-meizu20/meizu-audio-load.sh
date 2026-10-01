@@ -16,6 +16,12 @@
 set -x
 
 # 0) teardown (buses are unbound via meizu-noswr, zero storm here)
+# Belt and braces: unbind both masters ourselves in case noswr ran
+# before the swr driver ever probed (its echo would have been a no-op
+# and the buses could be up and storming by now).
+echo 6ad0000.soundwire > /sys/bus/platform/drivers/qcom-soundwire/unbind 2>/dev/null
+echo 6d30000.soundwire > /sys/bus/platform/drivers/qcom-soundwire/unbind 2>/dev/null
+sleep 1
 modprobe -r snd_soc_sc8280xp 2>/dev/null
 modprobe -r snd_soc_qcom_sdw 2>/dev/null
 modprobe -r snd_soc_wcd938x 2>/dev/null

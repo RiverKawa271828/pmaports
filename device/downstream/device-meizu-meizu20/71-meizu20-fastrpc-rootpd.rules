@@ -1,0 +1,13 @@
+# Meizu 20 (m2381): ADSP root-PD daemon trigger (device r9, 2026-10-01).
+#
+# /dev/fastrpc-adsp appears only when the ADSP remoteproc is up - seconds
+# into multi-user, after any boot-time unit condition was evaluated. A
+# ConditionPathExists= on the daemon unit therefore skips forever on boot
+# (observed r38 device day 2026-10-01: manual start needed). The stock
+# hexagonrpc udev rules (10-fastrpc.rules) only set permissions, no start
+# trigger - wire the trigger here instead of patching upstream rules.
+#
+# hexagonrpcd-adsp-rootpd.service itself ships with the patched
+# hexagonrpc (--pd audiopd, audit A2a); until that lands the want
+# referenced here is inert by design.
+SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", ENV{SYSTEMD_WANTS}="hexagonrpcd-adsp-rootpd.service"

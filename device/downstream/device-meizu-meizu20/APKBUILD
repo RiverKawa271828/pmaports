@@ -68,6 +68,11 @@ options="!check !archcheck"
 # DTS model "MEIZU20Inf"); without it q6apm's component probe fails and
 # the card cannot register. Built from meizu20-m1/audio-topology/
 # meizu20.m4 (audioreach-topology pin b4c1510) - keep source and bin in sync.
+# r9: 71-meizu20-fastrpc-rootpd.rules - udev SYSTEMD_WANTS for the ADSP
+# root-PD daemon, fired when /dev/fastrpc-adsp appears. DEPLOY WITH CARE:
+# meizu-audio.service is preset-enabled, so installing r9 makes the next
+# boot run the full WCD chain bring-up - deploy together with (or after)
+# the CLASH-fix kernel, or the boot storms again (2026-10-01 note).
 depends="
 	linux-meizu-meizu20
 	postmarketos-base
@@ -82,6 +87,7 @@ source="
 	deviceinfo
 	modprobe.conf
 	qbootctl.service
+	71-meizu20-fastrpc-rootpd.rules
 	80-device-meizu-meizu20.preset
 	meizu-touch-load.sh
 	meizu-amps-load.sh
@@ -131,6 +137,12 @@ package() {
 	done
 	install -Dm644 "$srcdir/80-device-meizu-meizu20.preset" \
 		"$pkgdir"/usr/lib/systemd/system-preset/80-device-meizu-meizu20.preset
+	# r9: udev trigger for the ADSP root-PD daemon session (the unit itself
+	# ships later with the patched hexagonrpc; the want is inert until
+	# then). A boot-time ConditionPathExists always evaluates before
+	# /dev/fastrpc-adsp exists and skips forever - r38 device day note.
+	install -Dm644 "$srcdir/71-meizu20-fastrpc-rootpd.rules" \
+		"$pkgdir"/usr/lib/udev/rules.d/71-meizu20-fastrpc-rootpd.rules
 	# UCM2 HiFi (silime d70e686): card conf + use case + conf.d pointer.
 	# The pointer is a symlink upstream; recreated here instead of shipping
 	# one (abuild flattens source= symlinks).
@@ -151,12 +163,15 @@ sha512sums="
 c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e3f5014f69f7dbde9e2e0810a5917bfe0e9b87064eeba2feb  deviceinfo
 96d1f86ff0f64f31a6da123eeff1944e287ce578c29a3a9cae77e00cabb2ed633bb6c433abb728ebcd3030e3b74ab7357ae090af8f8fa5c2c6f7fd0c6868bfa6  modprobe.conf
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl.service
-b15b4390111c9c6aaf78302a9631f71cdfa5ffe2c453340437d528fee0400717dbcb2ee2c663fb38c56a73c62f4d4510f02f51b27e11115dfe08f450fd67f32b  80-device-meizu-meizu20.preset
+c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
+5cb072c8036961c8bf7860b041ec9ebaac37a6de36084f6bb385bf82217672430c08aa8990510447c1f1ec914d27aaedc5da403c1ed592fcc07b56412c58b56c  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
+1962169e56aa87621d7dd71378c9af4e062e8fe5264a8bb0ea6f2a46a65411f698bc17e1472fd8d4eff42fb65f418a62f17e7721d0d8e4856426acfcf0488865  meizu-audio-load.sh
 99d4196b2043876d2affc526e25a7f5df33c5472bb7c9d959fdb869b247cb31d75a3ff3834d866f591644deac3fb01be2b51119fd5a9e20237768a06e3d42a22  meizu-bind-988000.sh
 cecf7d3c2dd3eff32e4168d547eefc2e8dcc8cf89b4fd1317d55a88b75dac38c40024c800be9f81e36e465694e7113e0f9928d1ec08ac21ae76dc36ec30824df  meizu-touch.service
 b568645243ffcb1d42c2990a7ae44223172d02ea64cb296caaa07af96b94c1a04341df3f76f07961b2ffb8aeaf19edcf1482c3c0196c005a1346e25986502536  meizu-amps.service
+65704cda1c39c4e711911a48611a68051fd8efb74efebe7db9781493cbaa86399245968bbfcfcc2f271368ed766f698c4c466fb872c54a7db6e1b0ae79c71bdf  meizu-audio.service
 1f07fcc711d36b379ffd3c85c44011e0f48e97d9837e0af1a44a7472378f35dbe08f1b3bfe783bcf18a257dc76005be4e0124f12aed58a13c401d8b82edeff9d  meizu-retimer.service
 b004796bd49c7b73a1e51cbb75559e88f6e89ffc0c049331adc9836e82d38c6d7c26d5d76ac68ee2bd8028109fc576fd2ece92a285b8936e84ef11dbf1c8e47e  meizu-pas.service
 742ba2dd20f04133361adb1574f17eb7631ea3099e17e8ee2925001a675e0347c5c30a9e073343b1d38dffc367d23d809eb6ed2f091f2e5c61a45dd637c97774  meizu-noswr.service
