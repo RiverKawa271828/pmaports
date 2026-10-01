@@ -1,0 +1,23 @@
+[Unit]
+Description=Server for FastRPC remote procedure calls from Qualcomm ADSP - audiopd
+Conflicts=suspend.target
+Before=suspend.target
+# Meizu 20 (SM8550): create + serve the "audiopd" static PD (Android
+# early-init daemon form). NOT enabled by default - audio PD creation
+# has a history of crashing boards on other SoCs (qualcomm/fastrpc
+# #97 QRB2210, #146 sm8750); start manually per experiment protocol.
+# Restart=no for the same reason: a failing PD create must not become a
+# 3-second crash loop hammering the DSP. Allow ~20s between attempts
+# (re-attach timeout observed 2026-10-01).
+# The DSP file service resolves <root>/dsp, so the dsp partition must
+# be mounted at /mnt/dsp first (meizu-dsp-mount.service).
+ConditionPathExists=/dev/fastrpc-adsp
+
+[Service]
+ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-adsp -d adsp -P audiopd -R /mnt
+Restart=no
+User=fastrpc
+Group=fastrpc
+
+[Install]
+WantedBy=multi-user.target
