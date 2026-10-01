@@ -1,0 +1,14 @@
+[Unit]
+Description=Meizu 20: mount the active-slot dsp partition read-only at /mnt/dsp
+After=local-fs.target
+Before=multi-user.target
+# Idempotence: skip when the tree is already there (manual mount or rerun).
+ConditionPathExists=!/mnt/dsp/adsp
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/meizu20/meizu-dsp-mount.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

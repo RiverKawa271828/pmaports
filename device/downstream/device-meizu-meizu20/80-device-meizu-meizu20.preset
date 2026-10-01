@@ -12,4 +12,7 @@ enable meizu-memsleep.service
 enable meizu-wfi.service
 enable meizu-noswr.service
 enable meizu-grow-rootfs.service
+# r13: read-only dsp mount feeding the audiopd file service (the audiopd
+# daemon itself stays manual - see temp/hexagonrpcd unit).
+enable meizu-dsp-mount.service
 enable devshell.service
