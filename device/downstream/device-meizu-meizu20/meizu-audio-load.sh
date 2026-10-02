@@ -12,6 +12,10 @@
 #    SoC (2026-10-01, one fastboot rescue). Safe only with the buses
 #    down - meizu-noswr.service unbinds 6d30000 early in boot, so this
 #    script's teardown phase runs in a zero-storm window.
+#  - RESTART SAFETY (2026-10-02): this script may only be (re)run from the
+#    cold-boot state (meizu-noswr already unbound both masters). Re-running
+#    it after the buses are up runs the teardown rmmod inside the ACTIVE TX
+#    storm = SoC freeze (one button-rescue 2026-10-02).
 # Serialization: chain tail of pas -> touch -> amps -> retimer -> audio.
 set -x
 
@@ -47,6 +51,16 @@ modprobe snd_soc_lpass_wsa_macro
 sleep 3
 modprobe soundwire_qcom
 sleep 6
+
+# 1b) wcd platform codec: its dai-registering component MUST be loaded
+# explicitly - udev never reliably loads it (2026-10-02: whole boot ran
+# with wcd938x_sdw bound on both slaves but snd_soc_wcd938x absent =>
+# machine driver stuck on "codec dai not found"; late manual load then
+# hit component-probe -110 inside the TX storm, "Initialization not
+# complete"). Load it here, in the same early window as B1's working
+# boot, before the TX master's clash storm ramps.
+modprobe snd_soc_wcd938x
+sleep 2
 
 # 2) machine driver kick (wcd938x_sdw comes back via udev modalias when
 # the slaves enumerate; re-probing the card picks up the links)
