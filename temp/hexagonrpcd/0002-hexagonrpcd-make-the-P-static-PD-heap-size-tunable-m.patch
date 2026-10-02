@@ -1,0 +1,177 @@
+From 9bdb7150efa7761ccd57b2849cd9545d4242e9f1 Mon Sep 17 00:00:00 2001
+From: ri <ri@localhost>
+Date: Fri, 2 Oct 2026 10:08:59 +0800
+Subject: [PATCH] hexagonrpcd: make the -P static PD heap size tunable (-m /
+ env)
+
+12MB is the A3-shaped single variable for the Meizu 20 audiopd
+experiment (stock reserves a 12MB ADSP remote heap; the official
+userspace default is 3MB). Make the heap size a knob instead of a
+recompile:
+
+  hexagonrpcd -P audiopd -m 12M ...
+  HEXAGONRPCD_MEMLEN=12M hexagonrpcd -P audiopd ...
+
+The env form exists so the packaged systemd unit can be overridden
+with a one-line Environment= drop-in, without rewriting ExecStart.
+Default stays 3MB (the official audio PD remote heap); -m without -P
+is rejected; parse errors reject K/M-less garbage and out-of-uapi-
+range values (memlen is u32 in INIT_CREATE_STATIC).
+---
+ hexagonrpcd/rpcd.c | 76 +++++++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 68 insertions(+), 8 deletions(-)
+
+diff --git a/hexagonrpcd/rpcd.c b/hexagonrpcd/rpcd.c
+index 4239124..4194fae 100644
+--- a/hexagonrpcd/rpcd.c
++++ b/hexagonrpcd/rpcd.c
+@@ -26,6 +26,7 @@
+ #include <linux/types.h>
+ #include <misc/fastrpc.h>
+ #include <stdint.h>
++#include <stdlib.h>
+ #include <unistd.h>
+ #include <signal.h>
+ #include <stdbool.h>
+@@ -49,9 +50,10 @@
+  * Meizu 20 (SM8550) SPF audio: replicate Android's early-init daemon
+  * `audioadsprpcd audiopd` (vendor.qti.audio-adsprpc-service.rc): create
+  * the "audiopd" named static PD and serve its session (listener +
+- * apps_std + apps_mem). The 3MB heap size is the official audio PD
+- * remote heap (fastrpc_apps_user.c: "3MB of remote heap … only for
++ * apps_std + apps_mem). The default 3MB heap size is the official audio
++ * PD remote heap (fastrpc_apps_user.c: "3MB of remote heap … only for
+  * Audio PD"); 1MB also completes, 16MB ETIMEDOUTs on this firmware.
++ * -m / HEXAGONRPCD_MEMLEN override it for single-variable experiments.
+  */
+ #define AUDIOPD_HEAP_SIZE 0x300000
+ 
+@@ -161,6 +163,8 @@ static void print_usage(const char *argv0)
+ 	       "\t-c SHELL\t\tCreate a new pd running the specified ELF\n"
+ 	       "\t-d DSP\t\tDSP name (default: "")\n"
+ 	       "\t-f DEVICE\tFastRPC device node to attach to\n"
++	       "\t-m MEMLEN\tHeap size for -P in bytes, with optional K/M suffix\n"
++	       "\t\t\t(default 3M; env HEXAGONRPCD_MEMLEN)\n"
+ 	       "\t-p PROGRAM\tRun client program with shared file descriptor\n"
+ 	       "\t-P PD\t\tCreate the named static PD (e.g. audiopd) and serve it\n"
+ 	       "\t-R DIR\t\tRoot directory of served files (default: /usr/share/qcom/)\n"
+@@ -221,11 +225,43 @@ err_close_fd:
+ 	return ret;
+ }
+ 
+-static int create_static_pd(int fd, const char *name)
++/*
++ * -P heap size knob: bytes, or KiB/MiB with a K/M suffix ("3M", "12M").
++ * Returns 0 on a parse error; 0 is not a usable heap size either way.
++ */
++static uint32_t parse_memlen(const char *arg)
++{
++	unsigned long long val;
++	char *end;
++
++	val = strtoull(arg, &end, 0);
++	if (end == arg) {
++		fprintf(stderr, "Invalid memlen \"%s\"\n", arg);
++		return 0;
++	}
++
++	if (*end == 'k' || *end == 'K')
++		val *= 1024;
++	else if (*end == 'm' || *end == 'M')
++		val *= 1024 * 1024;
++	else if (*end != '\0') {
++		fprintf(stderr, "Invalid memlen suffix in \"%s\"\n", arg);
++		return 0;
++	}
++
++	if (val == 0 || val > UINT32_MAX) {
++		fprintf(stderr, "Memlen out of range: \"%s\"\n", arg);
++		return 0;
++	}
++
++	return (uint32_t)val;
++}
++
++static int create_static_pd(int fd, const char *name, uint32_t memlen)
+ {
+ 	struct fastrpc_init_create_static init = {
+ 		.namelen = (uint32_t)(strlen(name) + 1),
+-		.memlen = AUDIOPD_HEAP_SIZE,
++		.memlen = memlen,
+ 		.name = (uint64_t)(uintptr_t)name,
+ 	};
+ 	int ret;
+@@ -454,10 +490,12 @@ int main(int argc, char* argv[])
+ 	const char *dsp = "";
+ 	const char *create_shell = NULL;
+ 	const char *static_pd = NULL;
++	const char *memlen_arg = NULL;
+ 	const char *guessed_device_dir;
+ 	const char **progs;
+ 	pid_t *pids;
+ 	size_t n_progs = 0;
++	uint32_t memlen = AUDIOPD_HEAP_SIZE;
+ 	int fd, ret, opt;
+ 	bool attach_sns = false;
+ 
+@@ -477,7 +515,7 @@ int main(int argc, char* argv[])
+ 	if (guessed_device_dir != NULL)
+ 		device_dir = guessed_device_dir;
+ 
+-	while ((opt = getopt(argc, argv, "c:d:f:p:P:R:s")) != -1) {
++	while ((opt = getopt(argc, argv, "c:d:f:m:p:P:R:s")) != -1) {
+ 		switch (opt) {
+ 			case 'c':
+ 				create_shell = optarg;
+@@ -488,6 +526,9 @@ int main(int argc, char* argv[])
+ 			case 'f':
+ 				fastrpc_node = optarg;
+ 				break;
++			case 'm':
++				memlen_arg = optarg;
++				break;
+ 			case 'p':
+ 				progs[n_progs] = optarg;
+ 				n_progs++;
+@@ -517,6 +558,25 @@ int main(int argc, char* argv[])
+ 		goto err_free_pids;
+ 	}
+ 
++	if (memlen_arg != NULL) {
++		if (static_pd == NULL) {
++			fprintf(stderr, "-m requires -P\n");
++			goto err_free_pids;
++		}
++
++		memlen = parse_memlen(memlen_arg);
++		if (memlen == 0)
++			goto err_free_pids;
++	} else if (static_pd != NULL) {
++		const char *env_memlen = getenv("HEXAGONRPCD_MEMLEN");
++
++		if (env_memlen != NULL) {
++			memlen = parse_memlen(env_memlen);
++			if (memlen == 0)
++				goto err_free_pids;
++		}
++	}
++
+ 	printf("Starting %s (%s) on %s\n", argv[0], attach_sns? "INIT_ATTACH_SNS": "INIT_ATTACH", fastrpc_node);
+ 
+ 	fd = open(fastrpc_node, O_RDWR);
+@@ -528,9 +588,9 @@ int main(int argc, char* argv[])
+ 	if (attach_sns)
+ 		ret = ioctl(fd, FASTRPC_IOCTL_INIT_ATTACH_SNS, NULL);
+ 	else if (static_pd != NULL) {
+-		printf("Creating static PD \"%s\" (remote heap %d bytes)\n",
+-		       static_pd, AUDIOPD_HEAP_SIZE);
+-		ret = create_static_pd(fd, static_pd);
++		printf("Creating static PD \"%s\" (remote heap %u bytes)\n",
++		       static_pd, memlen);
++		ret = create_static_pd(fd, static_pd, memlen);
+ 	}
+ 	else if (create_shell != NULL)
+ 		ret = create_shell_pd(fd, create_shell);
+-- 
+2.43.0
+

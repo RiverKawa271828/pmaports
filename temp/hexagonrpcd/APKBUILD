@@ -5,13 +5,15 @@
 # DSP file tree aliases (/vendor/dsp, /data/vendor/audio_dsp -> <root>/dsp)
 # and the hexagonrpcd-adsp-audiopd.service unit (NOT enabled - start
 # manually, see the unit for the crash-history rationale).
+# r45 (pkgrel 5): -m / HEXAGONRPCD_MEMLEN heap-size knob for the 12MB
+# single-variable audiopd test (0002 patch).
 # Upstream candidate: linux-msm/hexagonrpc; local tree = meizu20/
 # hexagonrpc-upstream (branch meizu20-audiopd).
 # Rollback on device: apk add hexagonrpcd==0.4.0-r3 (Alpine repos).
 maintainer="ri <ri@example.com>"
 pkgname=hexagonrpcd
 pkgver=0.4.0
-pkgrel=4
+pkgrel=5
 pkgdesc="Qualcomm HexagonFS daemon"
 url="https://github.com/linux-msm/hexagonrpc"
 # s390x: fails on 1 test. Hexagonrpcd is specific to Qualcomm ARM SoCs, so let's ignore it for now.
@@ -21,7 +23,7 @@ makedepends="linux-headers meson"
 install="$pkgname.pre-install"
 subpackages="$pkgname-doc $pkgname-openrc $pkgname-systemd $pkgname-udev"
 
-source="$pkgname-$pkgver.tar.gz::https://github.com/linux-msm/hexagonrpc/archive/refs/tags/v$pkgver.tar.gz
+	source="$pkgname-$pkgver.tar.gz::https://github.com/linux-msm/hexagonrpc/archive/refs/tags/v$pkgver.tar.gz
 	10-fastrpc.rules
 	$pkgname-adsp-rootpd.initd
 	$pkgname-adsp-sensorspd.initd
@@ -29,6 +31,7 @@ source="$pkgname-$pkgver.tar.gz::https://github.com/linux-msm/hexagonrpc/archive
 	$pkgname-adsp-audiopd.service
 	systemd-services.patch
 	0001-hexagonrpcd-add-P-option-to-create-and-serve-a-named.patch
+	0002-hexagonrpcd-make-the-P-static-PD-heap-size-tunable-m.patch
 	"
 builddir="$srcdir/hexagonrpc-$pkgver"
 
@@ -66,4 +69,5 @@ c88d3a813aa92298c3585c33111389c7175c67240497f2aeeb413228ccd8b991ed2e5edd2ffd4603
 4cab471d5bcd3b947a0959a9d5be89432da04c0451d1b9bb85c935bb2fdf8ad0135e8801b2c368434b5c616e08e7282e587a7727acf30d3ada171d2e77e9dfde  hexagonrpcd-adsp-audiopd.service
 2ebd6709180f2c60e355770d091c61d95e012727c94101d5e3e451c91af43f4334ef02ebd85c8ad1f99d3adc7fcb27ff5db1afaeec71cddc638db95b626128ad  systemd-services.patch
 e1311270af2109f8124f7f32040aae0bb509785b168c516dbbeaac5b6875c597768ab2c08e62ec541ff61d94818aa83b39e43959615d5b04449e7ba09efec29e  0001-hexagonrpcd-add-P-option-to-create-and-serve-a-named.patch
+6fb70d62b5c7122d33506b953acdce4e04392b3a25f61c3148ded1fbb7f3009e3d6ae8d68cca3f24d7ca085bf265a3085cb5d7e88a0de1be34e92f6366a53e59  0002-hexagonrpcd-make-the-P-static-PD-heap-size-tunable-m.patch
 "
