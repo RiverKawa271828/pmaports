@@ -1,0 +1,260 @@
+From 9f14dd036e5f15d31c67f6c16f965c12554eccae Mon Sep 17 00:00:00 2001
+From: ri <ri@localhost>
+Date: Fri, 2 Oct 2026 21:36:57 +0800
+Subject: [PATCH] hexagonrpcd: serve static-PD sessions in the official audiopd
+ shape
+
+Replicate the three pieces of the official audioadsprpcd session
+(libadsprpc.so + libadsp_default_listener.so, R3 reverse-engineering):
+
+- keep the adsp_default_listener handle open for the whole session and
+  pump it from a dedicated thread (remote_handle_invoke(listener, 1)
+  equivalent), instead of registering and releasing it immediately;
+  failures restart the pump after 25ms, same as the official wrapper;
+- the geteventfd handle has no portable equivalent: the mainline
+  fastrpc driver has no poll()/eventfd substrate, so the pump blocks
+  inside the invoke itself;
+- apps_std: stay silent on ENOENT for oemconfig.so and
+  librpcversion_skel.so, which libadsprpc.so exempts from its error
+  path (0x52bd4/0x53190).
+---
+ hexagonrpcd/apps_std.c                        |  20 ++++
+ .../interfaces/adsp_default_listener.def      |   7 ++
+ hexagonrpcd/rpcd.c                            | 111 ++++++++++++++++--
+ 3 files changed, 126 insertions(+), 12 deletions(-)
+
+diff --git a/hexagonrpcd/apps_std.c b/hexagonrpcd/apps_std.c
+index 06519f8..0fcd53c 100644
+--- a/hexagonrpcd/apps_std.c
++++ b/hexagonrpcd/apps_std.c
+@@ -150,6 +150,17 @@ static uint32_t apps_std_fseek(void *data,
+ 	return 0;
+ }
+ 
++/*
++ * libadsprpc.so treats ENOENT of these two optional modules as benign:
++ * their absence is silently ignored on stock firmware (no error log, no
++ * retry), so stay equally quiet to present the same behaviour.
++ */
++static bool is_enoent_whitelisted(const char *name)
++{
++	return !strcmp(name, "oemconfig.so")
++	    || !strcmp(name, "librpcversion_skel.so");
++}
++
+ static uint32_t apps_std_fopen_with_env(void *data,
+ 					const struct fastrpc_io_buffer *inbufs,
+ 					struct fastrpc_io_buffer *outbufs)
+@@ -190,6 +201,15 @@ static uint32_t apps_std_fopen_with_env(void *data,
+ 
+ 	fd = hexagonfs_openat(ctx->fds, ctx->rootfd, dirfd, inbufs[3].p);
+ 	if (fd < 0) {
++		/*
++		 * libadsprpc.so treats ENOENT of these two optional modules
++		 * as benign: it silently ignores their absence (no error
++		 * log, no retry). Stay equally quiet so the DSP-side loader
++		 * sees the same behaviour as on stock.
++		 */
++		if (fd == -ENOENT && is_enoent_whitelisted((const char *) inbufs[3].p))
++			return AEE_EFAILED;
++
+ 		fprintf(stderr, "Could not open %s: %s\n",
+ 				(const char *) inbufs[3].p,
+ 				strerror(errno));
+diff --git a/hexagonrpcd/interfaces/adsp_default_listener.def b/hexagonrpcd/interfaces/adsp_default_listener.def
+index 0e56ed5..61c7f53 100644
+--- a/hexagonrpcd/interfaces/adsp_default_listener.def
++++ b/hexagonrpcd/interfaces/adsp_default_listener.def
+@@ -26,4 +26,11 @@
+ 
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(0, adsp_default_listener_register, 0, 0, 0, 0)
+ 
++/*
++ * Method 1: pump a pending listener event. libadsp_default_listener.so
++ * calls it in its service loop (remote_handle_invoke(listener_fd, 1, -1)
++ * after poll(geteventfd)); the vendor library passes no buffers.
++ */
++HEXAGONRPC_DEFINE_REMOTE_METHOD(1, adsp_default_listener_invoke, 0, 0, 0, 0)
++
+ #endif /* INTERFACE_ADSP_DEFAULT_LISTENER_DEF */
+diff --git a/hexagonrpcd/rpcd.c b/hexagonrpcd/rpcd.c
+index 4194fae..2250551 100644
+--- a/hexagonrpcd/rpcd.c
++++ b/hexagonrpcd/rpcd.c
+@@ -25,6 +25,7 @@
+ #include <libhexagonrpc/interfaces/remotectl.def>
+ #include <linux/types.h>
+ #include <misc/fastrpc.h>
++#include <pthread.h>
+ #include <stdint.h>
+ #include <stdlib.h>
+ #include <unistd.h>
+@@ -54,6 +55,17 @@
+  * PD remote heap (fastrpc_apps_user.c: "3MB of remote heap … only for
+  * Audio PD"); 1MB also completes, 16MB ETIMEDOUTs on this firmware.
+  * -m / HEXAGONRPCD_MEMLEN override it for single-variable experiments.
++ *
++ * The official three-piece session shape, mapped onto this daemon:
++ *  - remote_handle_open("'\":;./\createstaticpd:audiopd")  => -P's
++ *    INIT_CREATE_STATIC ioctl (the mainline kernel carries the PD name
++ *    to the DSP inside the init message, same as the vendor library).
++ *  - remote_handle_open("adsp_default_listener") + register, held open
++ *    for the whole session => remotectl_open + register below.
++ *  - remote_handle_open("'\":;./\geteventfd") + poll/invoke loop =>
++ *    NOT portable: the mainline fastrpc driver has no poll()/eventfd
++ *    substrate. The pump thread blocks inside the method-1 invoke
++ *    instead, which is the same "host is waiting" shape.
+  */
+ #define AUDIOPD_HEAP_SIZE 0x300000
+ 
+@@ -130,28 +142,77 @@ static int adsp_default_listener_register(struct fastrpc_context *ctx)
+ 	return fastrpc(&adsp_default_listener_register_def, ctx);
+ }
+ 
++/*
++ * Official libadsp_default_listener.so: poll(geteventfd) then invoke
++ * method 1 on the listener handle, restarting 25ms after any failure.
++ * Without a geteventfd substrate the pump cannot wait for an event, so
++ * it paces every invoke (25ms, the official restart cadence) and backs
++ * off exponentially on repeated failures - a method that returns
++ * instantly must not become a busy loop.
++ */
++static void *adsp_default_listener_pump(void *arg)
++{
++	struct fastrpc_context *ctx = arg;
++	unsigned failures = 0;
++	unsigned delay_ms = 25;
++
++	for (;;) {
++		int ret = fastrpc(&adsp_default_listener_invoke_def, ctx);
++
++		if (ret == 0) {
++			failures = 0;
++			delay_ms = 25;
++		} else {
++			failures++;
++			if (failures == 1 || (failures % 400) == 0)
++				fprintf(stderr,
++					"adsp_default_listener invoke failed: %d (%u times, retrying)\n",
++					ret, failures);
++			if (delay_ms < 2000)
++				delay_ms *= 2;
++		}
++
++		usleep(delay_ms * 1000);
++	}
++
++	return NULL;
++}
++
+ static void remotectl_err(const char *err)
+ {
+ 	fprintf(stderr, "Could not remotectl: %s\n", err);
+ }
+ 
+-static int register_fastrpc_listener(int fd)
++static int open_fastrpc_listener(int fd, struct fastrpc_context **ctx)
+ {
+-	struct fastrpc_context *ctx;
+ 	int ret;
+ 
+-	ret = remotectl_open(fd, "adsp_default_listener", &ctx, remotectl_err);
++	ret = remotectl_open(fd, "adsp_default_listener", ctx, remotectl_err);
+ 	if (ret)
+-		return 1;
++		return ret;
+ 
+-	ret = adsp_default_listener_register(ctx);
++	ret = adsp_default_listener_register(*ctx);
+ 	if (ret) {
+ 		fprintf(stderr, "Could not register ADSP default listener\n");
+-		goto err;
++		remotectl_close(*ctx, remotectl_err);
++		*ctx = NULL;
+ 	}
+ 
+-err:
++	return ret;
++}
++
++/* Legacy sessions: register the listener and release the handle again. */
++static int register_fastrpc_listener(int fd)
++{
++	struct fastrpc_context *ctx;
++	int ret;
++
++	ret = open_fastrpc_listener(fd, &ctx);
++	if (ret)
++		return ret;
++
+ 	remotectl_close(ctx, remotectl_err);
++
+ 	return ret;
+ }
+ 
+@@ -327,10 +388,14 @@ static int start_clients(size_t n_progs, const char **progs, pid_t *pids)
+ 	return 0;
+ }
+ 
+-static void *start_reverse_tunnel(int fd, const char *device_dir, const char *dsp)
++static void *start_reverse_tunnel(int fd, const char *device_dir, const char *dsp,
++				  bool serve_default_listener)
+ {
+ 	struct fastrpc_interface **ifaces;
+ 	struct hexagonfs_dirent *root_dir;
++	struct fastrpc_context *listener_ctx = NULL;
++	pthread_t pump_thread;
++	bool pump_started = false;
+ 	size_t n_ifaces = 3;
+ 	int ret;
+ 
+@@ -351,12 +416,34 @@ static void *start_reverse_tunnel(int fd, const char *device_dir, const char *ds
+ 	ifaces[1] = fastrpc_apps_std_init(root_dir);
+ 	ifaces[2] = fastrpc_apps_mem_init(fd);
+ 
+-	ret = register_fastrpc_listener(fd);
+-	if (ret)
+-		goto err;
++	/*
++	 * The official audiopd holder keeps the adsp_default_listener
++	 * handle open and pumps it for the whole session; plain sessions
++	 * keep the legacy register-and-release behaviour.
++	 */
++	if (serve_default_listener) {
++		ret = open_fastrpc_listener(fd, &listener_ctx);
++		if (ret)
++			goto err;
++
++		if (pthread_create(&pump_thread, NULL,
++				   adsp_default_listener_pump,
++				   listener_ctx) == 0)
++			pump_started = true;
++	} else {
++		ret = register_fastrpc_listener(fd);
++		if (ret)
++			goto err;
++	}
+ 
+ 	run_fastrpc_listener(fd, n_ifaces, ifaces);
+ 
++	if (pump_started) {
++		pthread_cancel(pump_thread);
++		pthread_join(pump_thread, NULL);
++		remotectl_close(listener_ctx, remotectl_err);
++	}
++
+ 	fastrpc_localctl_deinit(ifaces[REMOTECTL_HANDLE]);
+ 
+ 	free(ifaces);
+@@ -611,7 +698,7 @@ int main(int argc, char* argv[])
+ 	if (ret)
+ 		goto err_close_dev;
+ 
+-	start_reverse_tunnel(fd, device_dir, dsp);
++	start_reverse_tunnel(fd, device_dir, dsp, static_pd != NULL);
+ 
+ 	terminate_clients(n_progs, pids);
+ 
+-- 
+2.43.0
+
