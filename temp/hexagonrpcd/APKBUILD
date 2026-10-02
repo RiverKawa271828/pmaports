@@ -11,13 +11,20 @@
 # adsp_default_listener open + method-1 pump thread (geteventfd has no
 # mainline substrate), apps_std ENOENT whitelist for oemconfig.so /
 # librpcversion_skel.so.
+# r7 (sensors front 2026-10-03): 0004 = SSC registry version sibling
+# mapping (ROM parent-traverses registry/../sns_reg_version); 0005 =
+# narrow sns_registry property shim (method 0, two pinned property
+# names, empty values) ported from the liuqin sm8475 sensors stack to
+# the 0.4 interp2 dispatch. Serves the hexagonrpcd -s (INIT_ATTACH_SNS)
+# sensors session on /dev/fastrpc-adsp (Meizu 20: sensor PD lives on
+# ADSP, no SLPI remoteproc on kalama).
 # Upstream candidate: linux-msm/hexagonrpc; local tree = meizu20/
 # hexagonrpc-upstream (branch meizu20-audiopd).
 # Rollback on device: apk add hexagonrpcd==0.4.0-r3 (Alpine repos).
 maintainer="ri <ri@example.com>"
 pkgname=hexagonrpcd
 pkgver=0.4.0
-pkgrel=6
+pkgrel=7
 pkgdesc="Qualcomm HexagonFS daemon"
 url="https://github.com/linux-msm/hexagonrpc"
 # s390x: fails on 1 test. Hexagonrpcd is specific to Qualcomm ARM SoCs, so let's ignore it for now.
@@ -37,6 +44,8 @@ subpackages="$pkgname-doc $pkgname-openrc $pkgname-systemd $pkgname-udev"
 	0001-hexagonrpcd-add-P-option-to-create-and-serve-a-named.patch
 	0002-hexagonrpcd-make-the-P-static-PD-heap-size-tunable-m.patch
 	0003-hexagonrpcd-serve-static-PD-sessions-in-the-official.patch
+	0004-hexagonrpcd-expose-the-SSC-registry-version-sibling.patch
+	0005-hexagonrpcd-add-a-narrow-sns_registry-property-shim.patch
 	"
 builddir="$srcdir/hexagonrpc-$pkgver"
 
@@ -76,4 +85,6 @@ c88d3a813aa92298c3585c33111389c7175c67240497f2aeeb413228ccd8b991ed2e5edd2ffd4603
 e1311270af2109f8124f7f32040aae0bb509785b168c516dbbeaac5b6875c597768ab2c08e62ec541ff61d94818aa83b39e43959615d5b04449e7ba09efec29e  0001-hexagonrpcd-add-P-option-to-create-and-serve-a-named.patch
 6fb70d62b5c7122d33506b953acdce4e04392b3a25f61c3148ded1fbb7f3009e3d6ae8d68cca3f24d7ca085bf265a3085cb5d7e88a0de1be34e92f6366a53e59  0002-hexagonrpcd-make-the-P-static-PD-heap-size-tunable-m.patch
 9bc37ec20fd9c970b108ea3e9b9e108e247f4b54b6a676069c70884ada462785c4d495198629471ee8eeb32fff9eaa7d33fe1928260cfcca2e0e7fb7f4f01310  0003-hexagonrpcd-serve-static-PD-sessions-in-the-official.patch
+3ef33c96ff18c39b6f5d2828484f10d447b2d92d8c4334e05fb4249b0d5221c1cf7883b4b4dfb5d42eabd07856a614ec9b0ccbc4cdddb48bcb90e4602eaf8a9d  0004-hexagonrpcd-expose-the-SSC-registry-version-sibling.patch
+e059b492400e4f9b7306574372c6239dbbb4c8f15777bfb99b536411f19a0744d56938dbf75309146625ae07e3b9d2aae6e561bc331a33b96020f487cd3b443b  0005-hexagonrpcd-add-a-narrow-sns_registry-property-shim.patch
 "

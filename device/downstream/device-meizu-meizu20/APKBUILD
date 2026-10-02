@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=14
+pkgrel=19
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -132,6 +132,11 @@ source="
 	MEIZU20Inf.conf
 	HiFi.conf
 	MEIZU20Inf-tplg.bin
+	meizu-sensors-root.tgz
+	meizu-sensorspd.service
+	72-meizu20-fastrpc-sensorspd.rules
+	meizu-sensors-ready.sh
+	meizu-sensors-ready.service
 "
 
 build() {
@@ -177,6 +182,31 @@ package() {
 	# /dev/fastrpc-adsp exists and skips forever - r38 device day note.
 	install -Dm644 "$srcdir/71-meizu20-fastrpc-rootpd.rules" \
 		"$pkgdir"/usr/lib/udev/rules.d/71-meizu20-fastrpc-rootpd.rules
+	# r15: SSC sensors session (sensors round 2026-10-03). Kalama has no
+	# SLPI remoteproc: sensor PD = adsps.jsn sensor_pd on the ADSP, served
+	# via hexagonrpcd -s (INIT_ATTACH_SNS) from /dev/fastrpc-adsp, stock
+	# form = /vendor/bin/sscrpcd sensorspd. The -R root carries the stock
+	# sensor registry/calibration (persist harvest), kailua SEE config
+	# JSONs (json.lst set) and socinfo placeholders; the dsp alias points
+	# at /mnt/dsp (meizu-dsp-mount) for the DSP-side sns skel libraries
+	# (libsns_dynamic_loader_skel.so et al) - without them the framework
+	# never registers the sns_client QRTR service (0x190) and libssc finds
+	# no sensors. udev trigger, not boot condition (rootpd r38 lesson).
+	install -Dm644 "$srcdir/meizu-sensorspd.service" \
+		"$pkgdir"/usr/lib/systemd/system/meizu-sensorspd.service
+	install -Dm644 "$srcdir/72-meizu20-fastrpc-sensorspd.rules" \
+		"$pkgdir"/usr/lib/udev/rules.d/72-meizu20-fastrpc-sensorspd.rules
+	mkdir -p "$pkgdir"/usr/share/qcom/sm8550/Meizu/m2381
+	tar xzf "$srcdir/meizu-sensors-root.tgz" \
+		-C "$pkgdir"/usr/share/qcom/sm8550/Meizu/m2381
+	chmod -R a+rX "$pkgdir"/usr/share/qcom
+	ln -s /mnt/dsp "$pkgdir"/usr/share/qcom/sm8550/Meizu/m2381/dsp
+	# r16: readiness gate + proxy re-announce (boot scan races the sensors
+	# PD QRTR registration; D-Bus activation does not retry after exit).
+	install -Dm755 "$srcdir/meizu-sensors-ready.sh" \
+		"$pkgdir"/usr/lib/meizu20/meizu-sensors-ready.sh
+	install -Dm644 "$srcdir/meizu-sensors-ready.service" \
+		"$pkgdir"/usr/lib/systemd/system/meizu-sensors-ready.service
 	# UCM2 HiFi (silime d70e686): card conf + use case + conf.d pointer.
 	# The pointer is a symlink upstream; recreated here instead of shipping
 	# one (abuild flattens source= symlinks).
@@ -198,7 +228,7 @@ c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e
 96d1f86ff0f64f31a6da123eeff1944e287ce578c29a3a9cae77e00cabb2ed633bb6c433abb728ebcd3030e3b74ab7357ae090af8f8fa5c2c6f7fd0c6868bfa6  modprobe.conf
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-a29b49ea5523feb31c7537bc233259ef81583b95f2b8b151ea1759b99d65cdda7bcbfb7cf46a149e4e6526c0cf5f6a3fe2d2cded55045e088089a5d220462648  80-device-meizu-meizu20.preset
+3c386e86aed825d64ee1d5c23062cd2c305093c6fa530ea97c663cdb592eca7d410e325aff84b00ff36ecf2b11beb6aabee981be8dd65ca40c902126556d3885  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -220,4 +250,9 @@ efdd3a0dce1a80d6b58a2d3d023ed810b4c81dada573f8a642f18a08c2772df55cc459d0b84f96b7
 dbdc78f0da5e9c69fd2290a7c27cfd6d8ea92f934e765c5aacc632b6a610134e3a6dfe67ef952c536096073a774772d9a2a84f6517ccf7cd00a980eb9a114abb  MEIZU20Inf.conf
 d6e878242fff12fe6d53fc27aecbf4ac0b0d4e0742bb730b128fcbfcdf93355fa1edb11f56b8361e8ff65bee871a39bb0bfb57030b68d07d9c7c195df5e71f79  HiFi.conf
 8d9b27d6164bba1f090adabaed43c6dd7116c1bc7bcd3dec450c6658be11d5d701b7329f43700b8f23b72661a1f60ee295fb805d80ded819c3fc43f4a0d16717  MEIZU20Inf-tplg.bin
+4761799a99b6ef16d127cce87c0deca7fb4ca011cac976c87059ff203bed540ac6475e6eceabafc0e8677acb81713d2f65dfea325d160065c34934a8940e6f66  meizu-sensors-root.tgz
+6ed2a948dd0cbfdec531426102422c281a9e55a103cb44f29dc7b7c335052a987443b10d24738b209716bfad8981919025f85b717b4bab4c03d7af1f050812e9  meizu-sensorspd.service
+11dd8a4c1f55bc28982bc265c531e4af82f437a6dcf9f549c7b0b883900a6666a89622d3ceb02250337140a8182edd5db3e79810ddc424d81db485e926cac1a8  72-meizu20-fastrpc-sensorspd.rules
+8ec0af5e241332999a3d2d13e187d6f858f8226e4c513828f76f4ae59186a20f3c3056d0a93103ed053905a462ad817e1b500c8148de782a33c6823862d9d03e  meizu-sensors-ready.sh
+4689a68dbcf154cd1cb7c417dab199ae71fca3f384e111961678afabcf7fa1a1482770b03e376352942d8d43286fd42628e479b9935922941f1ffc734687ee2d  meizu-sensors-ready.service
 "

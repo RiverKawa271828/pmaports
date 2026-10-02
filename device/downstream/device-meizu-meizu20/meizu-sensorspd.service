@@ -1,0 +1,20 @@
+[Unit]
+Description=Meizu 20 SSC sensors session (hexagonrpcd sensorspd on ADSP)
+# Kalama has no SLPI remoteproc: the sensor PD (adsps.jsn sensor_pd) lives
+# on the ADSP and is served from /dev/fastrpc-adsp via INIT_ATTACH_SNS
+# (stock form: /vendor/bin/sscrpcd sensorspd). -R root carries the stock
+# sensor registry/calibration (persist harvest), the kailua SEE config
+# JSONs and the socinfo placeholders (mainline qcom_socinfo does not
+# export hw_platform etc.). Triggered by udev on fastrpc-adsp creation -
+# a boot-time ConditionPathExists skips forever (rootpd r38 lesson).
+After=meizu-dsp-mount.service
+
+[Service]
+ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-adsp -d adsp -s -R /usr/share/qcom/sm8550/Meizu/m2381
+Restart=always
+RestartSec=3
+User=fastrpc
+Group=fastrpc
+
+[Install]
+WantedBy=multi-user.target

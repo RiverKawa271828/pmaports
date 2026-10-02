@@ -1,0 +1,210 @@
+From 7c3fbb1e5b7f23c231b2981e6bf222e3d3c9c243 Mon Sep 17 00:00:00 2001
+From: ri <ri@localhost>
+Date: Sat, 3 Oct 2026 05:59:32 +0800
+Subject: [PATCH 5/5] hexagonrpcd: add a narrow sns_registry property shim
+
+The SM8550 sensor ROM opens sns_registry and invokes method 0 while
+consuming sns_reg_config. Serve only the two property names present in
+the pinned sns_reg_config and return an empty value for both; reject
+every other method or shape. Deliberately avoids a generic Android
+property service.
+
+Port of the liuqin (xiaomipad-6pro-mainline) 0002 patch onto the 0.4
+interp2 dispatch: the blob-only method maps to def (0,1,0,1) and the
+interp2 buffer-count check already pins SC to REMOTE_SCALARS_MAKE(0,2,1),
+so no separate scalar-shape gate is needed.
+---
+ hexagonrpcd/meson.build    |   1 +
+ hexagonrpcd/rpcd.c         |   4 +-
+ hexagonrpcd/sns_registry.c | 107 +++++++++++++++++++++++++++++++++++++
+ hexagonrpcd/sns_registry.h |  23 ++++++++
+ 4 files changed, 134 insertions(+), 1 deletion(-)
+ create mode 100644 hexagonrpcd/sns_registry.c
+ create mode 100644 hexagonrpcd/sns_registry.h
+
+diff --git a/hexagonrpcd/meson.build b/hexagonrpcd/meson.build
+index 3d1e9d1..47da5f1 100644
+--- a/hexagonrpcd/meson.build
++++ b/hexagonrpcd/meson.build
+@@ -12,6 +12,7 @@ executable('hexagonrpcd',
+   'localctl.c',
+   'rpcd.c',
+   'rpcd_builder.c',
++  'sns_registry.c',
+   c_args : cflags,
+   include_directories : include,
+   install : true,
+diff --git a/hexagonrpcd/rpcd.c b/hexagonrpcd/rpcd.c
+index 2250551..65d1e66 100644
+--- a/hexagonrpcd/rpcd.c
++++ b/hexagonrpcd/rpcd.c
+@@ -46,6 +46,7 @@
+ #include "listener.h"
+ #include "localctl.h"
+ #include "rpcd_builder.h"
++#include "sns_registry.h"
+ 
+ /*
+  * Meizu 20 (SM8550) SPF audio: replicate Android's early-init daemon
+@@ -396,7 +397,7 @@ static void *start_reverse_tunnel(int fd, const char *device_dir, const char *ds
+ 	struct fastrpc_context *listener_ctx = NULL;
+ 	pthread_t pump_thread;
+ 	bool pump_started = false;
+-	size_t n_ifaces = 3;
++	size_t n_ifaces = SNS_REGISTRY + 1;
+ 	int ret;
+ 
+ 	ifaces = malloc(sizeof(struct fastrpc_interface) * n_ifaces);
+@@ -415,6 +416,7 @@ static void *start_reverse_tunnel(int fd, const char *device_dir, const char *ds
+ 	// Dynamic interfaces with no hardcoded handle
+ 	ifaces[1] = fastrpc_apps_std_init(root_dir);
+ 	ifaces[2] = fastrpc_apps_mem_init(fd);
++	ifaces[SNS_REGISTRY] = (struct fastrpc_interface *) &sns_registry_interface;
+ 
+ 	/*
+ 	 * The official audiopd holder keeps the adsp_default_listener
+diff --git a/hexagonrpcd/sns_registry.c b/hexagonrpcd/sns_registry.c
+new file mode 100644
+index 0000000..91acf4f
+--- /dev/null
++++ b/hexagonrpcd/sns_registry.c
+@@ -0,0 +1,107 @@
++/*
++ * Qualcomm sensors registry property shim
++ *
++ * Copyright (C) 2026 HexagonRPC Contributors
++ *
++ * This file is part of HexagonRPC.
++ *
++ * HexagonRPC is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ */
++
++#include <endian.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <string.h>
++
++#include "aee_error.h"
++#include "listener.h"
++#include "sns_registry.h"
++
++#define SNS_PROPERTY_VALUE_MAX 92
++
++static const char property0[] = "persist.vendor.sensors.enable.property";
++static const char property1[] = "persist.vendor.sensors.enable.property1";
++
++static int property_is_allowed(const void *name, size_t len)
++{
++	return (len == sizeof(property0) && !memcmp(name, property0, len))
++	    || (len == sizeof(property1) && !memcmp(name, property1, len));
++}
++
++static uint32_t sns_registry_get_property(void *data,
++					  const struct fastrpc_io_buffer *inbufs,
++					  struct fastrpc_io_buffer *outbufs)
++{
++	const uint32_t *first_in = inbufs[0].p;
++	size_t prop_name_len;
++	size_t prop_value_len;
++
++	(void) data;
++
++	/* Never reflect uninitialized heap contents, including on rejection. */
++	memset(outbufs[0].p, 0, outbufs[0].s);
++
++	if (inbufs[0].s != 2 * sizeof(uint32_t))
++		return AEE_EBADPARM;
++
++	prop_name_len = le32toh(first_in[0]);
++	prop_value_len = le32toh(first_in[1]);
++
++	if (prop_name_len != inbufs[1].s
++	 || prop_value_len != outbufs[0].s
++	 || prop_name_len == 0
++	 || ((const char *) inbufs[1].p)[prop_name_len - 1] != '\0')
++		return AEE_EBADPARM;
++
++	if (prop_value_len < SNS_PROPERTY_VALUE_MAX) {
++		fprintf(stderr, "sns_registry output is too small: %zu\n",
++			prop_value_len);
++		return AEE_EBUFFERTOOSMALL;
++	}
++
++	if (!property_is_allowed(inbufs[1].p, prop_name_len)) {
++		fprintf(stderr, "sns_registry rejected a non-whitelisted property\n");
++		return AEE_EUNSUPPORTED;
++	}
++
++	/*
++	 * Both exact-ROM gates are intentionally unset on GNU/Linux.  Returning
++	 * an empty C string preserves that state without exposing a generic
++	 * Android property bridge to the sensor DSP.
++	 */
++	return AEE_SUCCESS;
++}
++
++/*
++ * interp2 wire shape of the QAIC-generated ROM skel method:
++ *
++ *   inbuf[0] = { uint32 prop_name_len, uint32 prop_value_len }  (primary)
++ *   inbuf[1] = NUL-terminated property name
++ *   outbuf[0] = property value, prop_value_len bytes
++ *
++ * The interp2 dispatch (listener.c) pins SC to REMOTE_SCALARS_MAKE(0,2,1)
++ * from these counts, so no separate scalar-shape gate is needed.
++ */
++const struct fastrpc_function_def_interp2 sns_registry_get_property_def = {
++	.msg_id = 0,
++	.in_nums = 0,
++	.in_bufs = 1,
++	.out_nums = 0,
++	.out_bufs = 1,
++};
++
++static const struct fastrpc_function_impl sns_registry_procs[] = {
++	{
++		.def = &sns_registry_get_property_def,
++		.impl = sns_registry_get_property,
++	},
++};
++
++const struct fastrpc_interface sns_registry_interface = {
++	.name = "sns_registry",
++	.n_procs = sizeof(sns_registry_procs) / sizeof(sns_registry_procs[0]),
++	.procs = sns_registry_procs,
++};
+diff --git a/hexagonrpcd/sns_registry.h b/hexagonrpcd/sns_registry.h
+new file mode 100644
+index 0000000..c29325b
+--- /dev/null
++++ b/hexagonrpcd/sns_registry.h
+@@ -0,0 +1,23 @@
++/*
++ * Qualcomm sensors registry property shim
++ *
++ * Copyright (C) 2026 HexagonRPC Contributors
++ *
++ * This file is part of HexagonRPC.
++ *
++ * HexagonRPC is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ */
++
++#ifndef SNS_REGISTRY_H
++#define SNS_REGISTRY_H
++
++#include "listener.h"
++
++#define SNS_REGISTRY 3
++
++extern const struct fastrpc_interface sns_registry_interface;
++
++#endif /* SNS_REGISTRY_H */
+-- 
+2.43.0
+

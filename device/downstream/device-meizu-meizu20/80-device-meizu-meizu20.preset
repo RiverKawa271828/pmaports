@@ -16,3 +16,6 @@ enable meizu-grow-rootfs.service
 # daemon itself stays manual - see temp/hexagonrpcd unit).
 enable meizu-dsp-mount.service
 enable devshell.service
+# r16: sensors readiness gate (waits for the SSC QRTR service, then
+# re-announces iio-sensor-proxy - boot scan races the sensors PD).
+enable meizu-sensors-ready.service

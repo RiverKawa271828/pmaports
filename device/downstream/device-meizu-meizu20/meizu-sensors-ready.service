@@ -1,0 +1,21 @@
+[Unit]
+Description=Meizu 20 SSC sensors readiness gate + iio-sensor-proxy re-announce
+# The sensors PD registers its QRTR service long after boot; the boot-time
+# iio-sensor-proxy scan races it, exits, and D-Bus activation never retries.
+# This gate polls for real samples end-to-end, then restarts the proxy once.
+#
+# Type=simple, NOT oneshot: a oneshot WantedBy=multi-user.target blocks the
+# target until the script exits - which deadlocks meizu-pas (After=
+# multi-user) and with it the ADSP, so the sensors the gate waits for can
+# never appear (observed r17 boot 2026-10-03: pas queued, no ADSP, gate
+# timing out). A simple service is "started" for its target immediately.
+After=meizu-sensorspd.service
+Wants=meizu-sensorspd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/meizu20/meizu-sensors-ready.sh
+TimeoutStartSec=420
+
+[Install]
+WantedBy=multi-user.target

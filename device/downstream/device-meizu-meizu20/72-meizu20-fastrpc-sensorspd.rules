@@ -1,0 +1,8 @@
+# Meizu 20 (m2381): SSC sensors session trigger (sensors round, 2026-10-03).
+#
+# Same shape as 71-meizu20-fastrpc-rootpd.rules: /dev/fastrpc-adsp appears
+# seconds into multi-user (ADSP remoteproc up), so the daemon must be
+# wanted from udev, not from a boot-time unit condition. The sensorspd
+# unit ships with the device package and serves the stock sensor registry
+# tree from /usr/share/qcom/sm8550/Meizu/m2381.
+SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", ENV{SYSTEMD_WANTS}="meizu-sensorspd.service"
