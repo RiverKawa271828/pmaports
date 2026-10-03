@@ -5,4 +5,12 @@
 # wanted from udev, not from a boot-time unit condition. The sensorspd
 # unit ships with the device package and serves the stock sensor registry
 # tree from /usr/share/qcom/sm8550/Meizu/m2381.
+#
+# ACCEL_MOUNT_MATRIX: iio-sensor-proxy's SSC accel driver reads this udev
+# property off the fastrpc misc device (drv-ssc-accel.c setup_mount_matrix).
+# The icm4x6xx is mounted 180° off the screen axes: without the matrix the
+# proxy computes inverted orientation (rotation turns away from gravity,
+# observed 2026-10-03 device day; user-confirmed working direction after
+# the 180° flip).
 SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", ENV{SYSTEMD_WANTS}="meizu-sensorspd.service"
+SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", ENV{ACCEL_MOUNT_MATRIX}="-1,0,0;0,-1,0;0,0,1"

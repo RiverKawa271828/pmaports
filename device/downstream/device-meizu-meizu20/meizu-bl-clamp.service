@@ -1,0 +1,6 @@
+[Unit]
+Description=Temporary min-brightness clamp guard (kernel clamp pending r50+)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/meizu20/meizu-bl-clamp.sh
