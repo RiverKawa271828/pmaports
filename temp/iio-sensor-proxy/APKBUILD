@@ -1,0 +1,62 @@
+# Forked from Alpine community (3.9-r2) for the Meizu 20 SSC sensors
+# round (2026-10-03): carries the liuqin SSC stability patches. 0003 is
+# load-bearing on this device - the kwin claim lands re-entrantly inside
+# the coldplug discovery (sync wrappers iterate the main context), gets
+# recorded as an absent-sensor claim, and the accelerometer then never
+# starts (light/compass/proximity fine, accel stream dead, rotation
+# button gone; observed on r50/r51 boots while r19 won the race).
+# 0004-0006 = SSC polling serialization / pending-claim release /
+# availability broadcast from the same stack.
+maintainer="ri <ri@example.com>"
+pkgname=iio-sensor-proxy
+pkgver=3.9
+pkgrel=3
+pkgdesc="IIO sensors to D-Bus proxy"
+url="https://gitlab.freedesktop.org/hadess/iio-sensor-proxy"
+arch="all"
+license="GPL-2.0-or-later"
+depends="dbus"
+makedepends="
+	eudev-dev
+	glib-dev
+	libgudev-dev
+	meson
+	polkit-dev
+	libssc-dev
+	"
+subpackages="$pkgname-openrc $pkgname-systemd $pkgname-udev $pkgname-dbg"
+source="https://gitlab.freedesktop.org/hadess/iio-sensor-proxy/-/archive/$pkgver/iio-sensor-proxy-$pkgver.tar.gz
+	iio-sensor-proxy.initd
+	0003-iio-sensor-proxy-start-preclaimed-coldplug-sensor.patch
+	0004-iio-sensor-proxy-serialize-ssc-accel-polling.patch
+	0005-iio-sensor-proxy-cancel-released-pending-claims.patch
+	0006-iio-sensor-proxy-broadcast-sensor-availability.patch
+	"
+
+build() {
+	abuild-meson \
+		-Db_lto=true \
+		-Dssc-support=enabled \
+		-Dsystemdsystemunitdir=/usr/lib/systemd/system \
+		. output
+	meson compile -C output
+}
+
+check() {
+	meson test --print-errorlogs -C output
+}
+
+package() {
+	DESTDIR="$pkgdir" meson install --no-rebuild -C output
+
+	install -Dm755 "$srcdir"/$pkgname.initd "$pkgdir"/etc/init.d/$pkgname
+}
+
+sha512sums="
+a89c842f8db2a1a36c1c7c990434bb57fd905224459170cba2ec56e79f1272acc4cac4221937704d5e9247f957d86fde716d25e2d1ccb80d88fa643b47edfda6  iio-sensor-proxy-3.9.tar.gz
+b25df94e249ca46fe96926e5a866c20dc913fa52a2d9259fb7a3594861c6b2f246fc7fef8a21f5b021f3a71401f734ae27210137b0b1917a7daaffb5e3221f2e  iio-sensor-proxy.initd
+0ec9c31e5438074488af8d7c2fa52fe5b17f627b54442a9ceb222f435dd7b633eb8dc63fed91e4c221699a89c8ef64349225e9dd4fb2182fa05c816b577951c1  0003-iio-sensor-proxy-start-preclaimed-coldplug-sensor.patch
+f71c77f09c6ec9a66cff3cf48c827ddc3a96e13dd7e1d280c7c2115dfd9e4404feac611d0b9e76b4e88b505bf5d1bb992bd985fc724c118e598a7c6e89e34647  0004-iio-sensor-proxy-serialize-ssc-accel-polling.patch
+4a4ba5071fbca71cdc0d5472b048155f72dbaa3a898ed9db3eb179ee9a5b44f8921251c1c8b72a32c191c496b9102e902f3c6778fb2f89bb9eef7b615539924c  0005-iio-sensor-proxy-cancel-released-pending-claims.patch
+8b5675a27f296fa28c4ca9f436ae3f5df416bef9f50f5be7fae80a0c7a2f2eb4c4bf83e7892c736599e8b4b8ec0f99aba3bef33a55df9f5dc90c7b21136fe290  0006-iio-sensor-proxy-broadcast-sensor-availability.patch
+"
