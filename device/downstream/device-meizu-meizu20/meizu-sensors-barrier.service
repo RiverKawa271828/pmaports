@@ -1,0 +1,24 @@
+[Unit]
+Description=Meizu 20 accel-ready barrier before the plasma session
+# kwin claims SensorProxy once at session start and never re-claims: if
+# the accelerometer is not up yet (ADSP/sensor PD lands ~boot+90s, plasma
+# would start ~boot+40s) kwin records an absent-sensor claim and the
+# rotation quick-settings tile never appears (observed 2026-10-04; a
+# proxy restart alone does NOT make kwin re-claim - only a session
+# restart did). This barrier lives in the GRAPHICAL transaction, not
+# multi-user - a long oneshot under multi-user starves meizu-pas
+# (After=multi-user) and with it the ADSP the barrier waits for
+# (meizu-sensors-ready r17 deadlock note). It holds plasma-mobile until
+# the proxy reports HasAccelerometer=true, so kwin's first and only
+# claim is a populated proxy. Timeout is non-fatal: plasma starts
+# anyway, worst case = the pre-existing missing-tile behaviour.
+After=meizu-sensors-ready.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/meizu20/meizu-sensors-barrier.sh
+TimeoutStartSec=300
+
+[Install]
+WantedBy=graphical.target

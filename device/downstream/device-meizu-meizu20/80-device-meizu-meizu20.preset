@@ -19,6 +19,10 @@ enable devshell.service
 # r16: sensors readiness gate (waits for the SSC QRTR service, then
 # re-announces iio-sensor-proxy - boot scan races the sensors PD).
 enable meizu-sensors-ready.service
+# r21: accel-ready barrier (graphical transaction) - kwin never
+# re-claims SensorProxy, so the session must not start before the
+# accelerometer exists (rotation QS tile, 2026-10-04).
+enable meizu-sensors-barrier.service
 # r20: brightness clamp guard timer (kernel floor is the primary fix,
 # this bounces sub-floor writes userspace-side within 2s).
 enable meizu-bl-clamp.timer
