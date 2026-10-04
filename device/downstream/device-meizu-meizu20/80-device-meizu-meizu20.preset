@@ -26,3 +26,5 @@ enable meizu-sensors-barrier.service
 # r20: brightness clamp guard timer (kernel floor is the primary fix,
 # this bounces sub-floor writes userspace-side within 2s).
 enable meizu-bl-clamp.timer
+# r22: bind the boot-orphan SEs (a80000 NFC + 994000 haptics) every boot.
+enable meizu-bind-nfc-haptics.service

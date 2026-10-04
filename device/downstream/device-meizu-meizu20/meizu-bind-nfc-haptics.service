@@ -1,0 +1,15 @@
+[Unit]
+Description=Meizu 20 bind boot-orphan GENI SEs (a80000 NFC + 994000 haptics)
+# 2026-10-04 device day: a80000 and 994000 never auto-bind at boot (geni
+# autoprobe race family); both proven safe by live traffic. NFC (nxp-nci@28)
+# and the haptics bus die without this on every boot. 880000 stays lethal,
+# never added. Last in the pas -> touch -> amps -> retimer chain.
+After=multi-user.target meizu-pas.service meizu-touch.service meizu-amps.service meizu-retimer.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/meizu20/meizu-bind-nfc-haptics.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

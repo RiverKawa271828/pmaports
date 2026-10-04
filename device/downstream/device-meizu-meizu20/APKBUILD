@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=21
+pkgrel=22
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -143,6 +143,8 @@ source="
 	meizu-bl-clamp.sh
 	meizu-bl-clamp.service
 	meizu-bl-clamp.timer
+	meizu-bind-nfc-haptics.sh
+	meizu-bind-nfc-haptics.service
 "
 
 build() {
@@ -225,7 +227,10 @@ package() {
 		"$pkgdir"/usr/lib/systemd/system/meizu-sensors-barrier.service
 	install -Dm644 "$srcdir/meizu-sensors-ordering.conf" \
 		"$pkgdir"/usr/lib/systemd/system/plasma-mobile.service.d/meizu-sensors-ordering.conf
-	# r20: min-brightness clamp guard. Belt-and-braces on top of the r50
+	# r22 (2026-10-04 device day): meizu-bind-nfc-haptics.service binds the
+# boot-orphan SEs a80000 (NFC) + 994000 (haptics) every boot (autoprobe
+# race family; both live-traffic-verified safe). 880000 stays lethal.
+# r20: min-brightness clamp guard. Belt-and-braces on top of the r50
 	# kernel backlight floor (panel-boe-meizu20 BL_MIN_BRIGHTNESS): bounce
 	# any sub-floor brightness write back within 2s so the plasma slider
 	# can never park the AMOLED black (observed 2026-10-03 device day).
@@ -235,6 +240,13 @@ package() {
 		"$pkgdir"/usr/lib/systemd/system/meizu-bl-clamp.service
 	install -Dm644 "$srcdir/meizu-bl-clamp.timer" \
 		"$pkgdir"/usr/lib/systemd/system/meizu-bl-clamp.timer
+	# r22: bind the boot-orphan GENI SEs every boot - a80000 (NFC nfc@28)
+	# and 994000 (haptics AW8697@5a) never auto-bind (autoprobe race
+	# family); both live-traffic-verified safe 2026-10-04 device day.
+	install -Dm755 "$srcdir/meizu-bind-nfc-haptics.sh" \
+		"$pkgdir"/usr/lib/meizu20/meizu-bind-nfc-haptics.sh
+	install -Dm644 "$srcdir/meizu-bind-nfc-haptics.service" \
+		"$pkgdir"/usr/lib/systemd/system/meizu-bind-nfc-haptics.service
 	# UCM2 HiFi (silime d70e686): card conf + use case + conf.d pointer.
 	# The pointer is a symlink upstream; recreated here instead of shipping
 	# one (abuild flattens source= symlinks).
@@ -256,7 +268,7 @@ c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e
 96d1f86ff0f64f31a6da123eeff1944e287ce578c29a3a9cae77e00cabb2ed633bb6c433abb728ebcd3030e3b74ab7357ae090af8f8fa5c2c6f7fd0c6868bfa6  modprobe.conf
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-e71cdf5ed878f0218972d8346894699ccfca4be79dc0f0f07499fad06cb8a3500ec77d0d2f009d28a412cf9abec90630f524a0b41fbcf23ff683351026ea226f  80-device-meizu-meizu20.preset
+7d1b4b2549b0bb927d10602ecd5a3aa0deeceb6d862b2db926d1e7540c00590b1f68f472837cfe1911c58deb3d81c163e158ab6b6712be98eb9f77f6f0dff66d  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -289,4 +301,6 @@ a57eb57749291cade9bcdea1b32aabcc3d064bce0421ccd544cb879d501006ae29f02ef4d8b81f40
 216a61dafbd88295ba8182eacd586157eca5e1c9d720e089cca6ffe5814335d36ecf4dc86b540dab5ae78b5dae8d1e3069ba06af5a77b2aa35e0d0616448b640  meizu-bl-clamp.sh
 20a6de20a95394ea7864c700704ddaffa29dc4cb4df340767afa8d328cfd6042957cafa05111b277c6a8701c4eb5ec973bc6c746c4c840d16d4302a39c9fe5c6  meizu-bl-clamp.service
 a37baab60fcadb3939d2aa32ef8d212744421a0762eb0208d4f7ce10914842228ebb11dd0ce6ace76a4083f317987c502263678a4a2af05bbf61552cfbf04d2c  meizu-bl-clamp.timer
+de85f8f83981eb233ecc93c9d9603e8cae1ab99621d426b9585e25c7976546f7109aa065ec8d363524b6ff057b19fc30d1697941ac04509a6bb972b5ea30306e  meizu-bind-nfc-haptics.sh
+df31b2575dad8c2e69656e2eefdc0b2e9ee3c44286b32f23dc38073ed85c44ac229324408044917d3f649761d38530602fa213447d5106aa59809daacaa1b848  meizu-bind-nfc-haptics.service
 "
