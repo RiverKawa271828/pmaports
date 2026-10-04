@@ -81,12 +81,21 @@ test -d "/proc/asound/$CARD" || {
 
 # r33: RCV full registers only with the per-amp firmware stack in place.
 # r34: full registers raised to the +12dB digital headroom (see header).
+# r35: kernel-log guard replaced - the dmesg ring fills up (GPR event
+# spam floods it by late boot) and the probe-time part string is gone
+# by the time a late route/restart runs. The new driver is identified
+# by its module image instead: 'wm_adsp firmware part' only exists in
+# the fork build (b52b99bfc6de+), and /lib/modules/$(uname -r) is by
+# definition the module set of the RUNNING kernel. Fallback direction
+# stays safe (no match = gentle 183/1).
 RCV_DIG=183
 RCV_ANA=1
 SPK_DIG=457
+KO=/lib/modules/$(uname -r)/kernel/sound/soc/codecs/snd-soc-cs35l45.ko
 if [ -f /lib/firmware/cirrus/cs35l45-rcv-dsp1-spk-prot.wmfw ] \
 	&& [ -f /lib/firmware/cirrus/cs35l45-rcv-dsp1-spk-prot.bin ] \
-	&& dmesg | grep -q 'wm_adsp firmware part = "cs35l45-rcv"'; then
+	&& { dmesg | grep -q 'wm_adsp firmware part = "cs35l45-rcv"' \
+		|| grep -q 'wm_adsp firmware part' "$KO" 2>/dev/null; }; then
 	RCV_DIG=457
 	RCV_ANA=3
 	echo "meizu-audio-route: per-amp RCV stack detected - @30 full registers 457/3"
