@@ -31,3 +31,7 @@ enable meizu-bind-nfc-haptics.service
 # audio device day 2026-10-04 (T4c): udev never probes the sound platform
 # device (of modalias T(null)) - idempotent machine-driver bind floor.
 enable meizu-sndcard-bind.service
+# audio daily round 2026-10-04 (S1): pin playback routing to the T4c
+# operating point every boot (FE MultiMedia1 -> SEC_MI2S -> CS35L45 x2,
+# safe volumes, amps on). Pure userspace; opens no PCM device.
+enable meizu-audio-route.service
