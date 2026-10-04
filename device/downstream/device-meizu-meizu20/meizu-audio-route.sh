@@ -30,11 +30,23 @@
 #    is no dmesg success trace at route time - file presence + part string
 #    is the practical proxy; the flashing-session acceptance (short error
 #    count + ear) closes the loop.
-#    Stereo slot logic (bottom=L/top=R candidate) is UNVERIFIED: the
-#    R channel has not been observed reaching @30; T2 host forensics
-#    (2026-10-05): FE=2ch, BE chain passes channels, i2s device module
-#    runs with sd_line_idx=1 and no static slot tokens - actual wire
-#    channel count is DSP-runtime, live probe pending.
+#    Stereo VERIFIED on-device (2026-10-05, user ear): L=top @30 (rcv,
+#    loads left.bin protection), R=bottom @31 (spk, right.bin) - matches
+#    the stock per-amp protection naming exactly, no swap needed. The
+#    old "R never reaches @30" verdict was the 183/1 near-mute masking
+#    the left channel; APM live print ch=2 confirms the DSP receives
+#    stereo (T2 closed, no copp defect).
+#    r34 loudness round (2026-10-05 device session, user ear A/B): the
+#    T4c-era pads are retired now that the per-amp DSP protection is
+#    verified (0 short errors through 0dBFS sine loops at full gain):
+#      - stream volume 26214 (40%, -8dB bypass-era pad) -> 65535
+#      - digital 409 (0dB, stock route value) -> 457 (+12dB, mainline
+#        ALSA max; flyme max slider lands here or below - their XML 817
+#        is raw 0dB, their playing dump was below max)
+#      - analog stays 3 (19dB = field max, 2-bit AMP_GAIN_PCM)
+#    Remaining loudness reserve = flyme fast-switch scene deltas
+#    (cirrus,fast-switch: spk/rcv-music|game|movie|voice.txt, vendored
+#    MBC ceiling retunes) - never harvested, needs a stock boot day.
 #    - the stream volume must be nonzero or the FE stays mute; the
 #      44-char truncated name below IS the real control name (the full
 #      "...Playback Volume" name does not exist - set it and you
@@ -68,26 +80,28 @@ test -d "/proc/asound/$CARD" || {
 # silent cset failures indistinguishable from successes).
 
 # r33: RCV full registers only with the per-amp firmware stack in place.
+# r34: full registers raised to the +12dB digital headroom (see header).
 RCV_DIG=183
 RCV_ANA=1
+SPK_DIG=457
 if [ -f /lib/firmware/cirrus/cs35l45-rcv-dsp1-spk-prot.wmfw ] \
 	&& [ -f /lib/firmware/cirrus/cs35l45-rcv-dsp1-spk-prot.bin ] \
 	&& dmesg | grep -q 'wm_adsp firmware part = "cs35l45-rcv"'; then
-	RCV_DIG=409
+	RCV_DIG=457
 	RCV_ANA=3
-	echo "meizu-audio-route: per-amp RCV stack detected - @30 full registers 409/3"
+	echo "meizu-audio-route: per-amp RCV stack detected - @30 full registers 457/3"
 else
 	echo "meizu-audio-route: per-amp RCV stack NOT detected - @30 stays gentle 183/1"
 fi
 
 for c in \
 	'SECONDARY_MI2S_RX Audio Mixer MultiMedia1:on,off' \
-	'stream0.vol_ctrl0 MultiMedia1 Playback Volu:26214' \
+	'stream0.vol_ctrl0 MultiMedia1 Playback Volu:65535' \
 	'SPK DACPCM Source:3' \
 	'RCV DACPCM Source:3' \
 	'SPK AMP Enable Switch:on' \
 	'RCV AMP Enable Switch:on' \
-	"SPK Digital PCM Volume:409" \
+	"SPK Digital PCM Volume:$SPK_DIG" \
 	"RCV Digital PCM Volume:$RCV_DIG" \
 	'SPK Analog PCM Volume:3' \
 	"RCV Analog PCM Volume:$RCV_ANA"
@@ -98,25 +112,34 @@ do
 		|| echo "meizu-audio-route: FAILED cset '$name' '$val'"
 done
 
-echo "meizu-audio-route: $CARD bound and pinned (RCV=$RCV_DIG/$RCV_ANA, SPK=409/3)"
+echo "meizu-audio-route: $CARD bound and pinned (RCV=$RCV_DIG/$RCV_ANA, SPK=$SPK_DIG/3, stream=100%)"
 
 # r33 drift re-pin: pulseaudio applies UCM (which still pins RCV 183/1 -
 # UCM csets cannot carry the runtime guard) once it claims the card, and
-# again on every profile enable. Re-assert RCV when it drifted. Only the
-# loudness direction can "lose" (reverted to 183 = quieter, never louder);
+# again on every profile enable. Re-assert RCV (and SPK, r34: UCM pins
+# SPK 409) when they drifted. Only the loudness direction can "lose"
+# (reverted to 183/409 = quieter, never louder);
 # 30s x 20 covers late pulse starts; after the loop a manual profile
 # switch may revert @30 until next boot - accepted residual, safe direction.
 i=0
 while [ $i -lt 20 ]; do
 	sleep 30
-	cur=$(amixer -c 0 cget "name=RCV Digital PCM Volume" 2>/dev/null \
-		| grep -o "values=[0-9]*" | tail -1 | cut -d= -f2)
-	if [ "$cur" != "$RCV_DIG" ]; then
-		amixer -c 0 cset "name=RCV Digital PCM Volume" "$RCV_DIG" >/dev/null \
-			|| echo "meizu-audio-route: FAILED re-pin RCV Digital"
-		amixer -c 0 cset "name=RCV Analog PCM Volume" "$RCV_ANA" >/dev/null \
-			|| echo "meizu-audio-route: FAILED re-pin RCV Analog"
-		echo "meizu-audio-route: re-pinned RCV (was $cur, target $RCV_DIG)"
-	fi
+	for pair in "RCV:$RCV_DIG" "SPK:$SPK_DIG"; do
+		amp=${pair%%:*}
+		target=${pair#*:}
+		cur=$(amixer -c 0 cget "name=$amp Digital PCM Volume" 2>/dev/null \
+			| grep -o "values=[0-9]*" | tail -1 | cut -d= -f2)
+		if [ "$cur" != "$target" ]; then
+			amixer -c 0 cset "name=$amp Digital PCM Volume" "$target" >/dev/null \
+				|| echo "meizu-audio-route: FAILED re-pin $amp Digital"
+			# UCM also drags RCV analog back to 1; only re-assert it here
+			# so a failed digital cset never leaves analog mismatched.
+			if [ "$amp" = "RCV" ]; then
+				amixer -c 0 cset "name=RCV Analog PCM Volume" "$RCV_ANA" >/dev/null \
+					|| echo "meizu-audio-route: FAILED re-pin RCV Analog"
+			fi
+			echo "meizu-audio-route: re-pinned $amp (was $cur, target $target)"
+		fi
+	done
 	i=$((i + 1))
 done
