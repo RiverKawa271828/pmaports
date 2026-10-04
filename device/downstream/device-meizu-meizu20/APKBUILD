@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=22
+pkgrel=23
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -105,9 +105,10 @@ depends="
 	e2fsprogs-extra
 "
 makedepends="devicepkg-dev"
-source="
+	source="
 	deviceinfo
 	modprobe.conf
+	70-meizu20-vibra.rules
 	qbootctl-meizu.service
 	71-meizu20-fastrpc-rootpd.rules
 	80-device-meizu-meizu20.preset
@@ -240,13 +241,19 @@ package() {
 		"$pkgdir"/usr/lib/systemd/system/meizu-bl-clamp.service
 	install -Dm644 "$srcdir/meizu-bl-clamp.timer" \
 		"$pkgdir"/usr/lib/systemd/system/meizu-bl-clamp.timer
-	# r22: bind the boot-orphan GENI SEs every boot - a80000 (NFC nfc@28)
-	# and 994000 (haptics AW8697@5a) never auto-bind (autoprobe race
-	# family); both live-traffic-verified safe 2026-10-04 device day.
+# r22: bind the boot-orphan GENI SEs every boot - a80000 (NFC nfc@28)
+# and 994000 (haptics AW8697@5a) never auto-bind (autoprobe race
+# family); both live-traffic-verified safe 2026-10-04 device day.
+# r23 (2026-10-04, AW8697 driver round): 70-meizu20-vibra.rules tags the
+# new aw8697-haptics input device FEEDBACKD_TYPE=vibra - feedbackd's
+# manager only probes devices with that udev property (the feedbackd
+# package rules cover other drivers, not this name).
 	install -Dm755 "$srcdir/meizu-bind-nfc-haptics.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-bind-nfc-haptics.sh
 	install -Dm644 "$srcdir/meizu-bind-nfc-haptics.service" \
 		"$pkgdir"/usr/lib/systemd/system/meizu-bind-nfc-haptics.service
+	install -Dm644 "$srcdir/70-meizu20-vibra.rules" \
+		"$pkgdir"/usr/lib/udev/rules.d/70-meizu20-vibra.rules
 	# UCM2 HiFi (silime d70e686): card conf + use case + conf.d pointer.
 	# The pointer is a symlink upstream; recreated here instead of shipping
 	# one (abuild flattens source= symlinks).
@@ -266,6 +273,7 @@ package() {
 sha512sums="
 c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e3f5014f69f7dbde9e2e0810a5917bfe0e9b87064eeba2feb  deviceinfo
 96d1f86ff0f64f31a6da123eeff1944e287ce578c29a3a9cae77e00cabb2ed633bb6c433abb728ebcd3030e3b74ab7357ae090af8f8fa5c2c6f7fd0c6868bfa6  modprobe.conf
+1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
 7d1b4b2549b0bb927d10602ecd5a3aa0deeceb6d862b2db926d1e7540c00590b1f68f472837cfe1911c58deb3d81c163e158ab6b6712be98eb9f77f6f0dff66d  80-device-meizu-meizu20.preset
