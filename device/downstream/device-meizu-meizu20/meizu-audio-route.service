@@ -1,18 +1,23 @@
 [Unit]
-Description=Meizu 20 audio: pin playback routing to the T4c operating point
-# Audio daily round S1 (2026-10-04): pulseaudio claims the card via
-# module-udev-detect, but nothing routes FE MultiMedia1 to the CS35L45 BE
-# or enables the amps - without this floor the desktop is silent after
-# every boot. Ordering is strictly after the sndcard bind floor; the
-# card can still take ~90s to register (ADSP boot + deferred probe), so
-# the script polls and the unit gets a generous start timeout.
-After=meizu-sndcard-bind.service
+Description=Meizu 20 audio: bring up and pin playback routing (bind retry + T4c operating point)
+# Audio daily round S1/S3 (2026-10-04): the machine-driver bind is not a
+# one-shot affair - an early `echo > bind` (boot+11s, ADSP still down)
+# fails with -EAGAIN and the card never registers. This unit is the
+# self-sufficient floor: it retries the bind until card0 appears (~90s,
+# ADSP boot), then pins the T4c operating point. It deliberately has NO
+# ordering dependencies at all: the earlier draft's After= chain
+# (route -> sndcard-bind -> amps -> touch -> multi-user.target) closed a
+# cycle back into WantedBy=multi-user.target and systemd DELETED this
+# unit's job at boot to break it (observed on the first S3 reboot).
+# Starting early is fine - the script only polls and waits. Values
+# converge with the r26 UCM files so pulseaudio's own UCM init cannot
+# undo the operating point.
 
 [Service]
-Type=oneshot
+Type=simple
 ExecStart=/usr/lib/meizu20/meizu-audio-route.sh
 RemainAfterExit=yes
-TimeoutStartSec=240
+TimeoutStartSec=520
 
 [Install]
 WantedBy=multi-user.target
