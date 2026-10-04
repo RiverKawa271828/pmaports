@@ -24,7 +24,7 @@ maintainer="ri <ri@example.com>"
 _flavor="meizu-meizu20"
 pkgname=linux-$_flavor
 pkgver=7.3.0_rc3
-pkgrel=57
+pkgrel=58
 pkgdesc="Mainline kernel for Meizu 20 (SM8550)"
 arch="aarch64"
 _carch="arm64"
@@ -48,10 +48,10 @@ makedepends="
 	"
 
 # fork phase-1 (2026-09-30): source = LOCAL tarball of our fork tree
-# (~/work/linux-mobile-ports, branch meizu20/7.3 @ torvalds base
-# 587858367581 + carry list). Regenerate with:
+# (~/work/linux-mobile-ports; r57 线 = branch meizu20-t4b，
+#  meizu20/7.3 停在 T3 micbias 诊断实验态勿用). Regenerate with:
 #   git -C ~/work/linux-mobile-ports archive --format=tar.gz \
-#     --prefix=linux-meizu-meizu20-fork-v$pkgver/ meizu20/7.3
+#     --prefix=linux-meizu-meizu20-fork-v$pkgver/ meizu20-t4b
 # Phase-2 switches source to the published fork git URL. silime _commit
 # kept below for provenance.
 _commit="3a94ad18d21de4c685c05937fb646517943910a1"
@@ -117,6 +117,6 @@ package() {
 }
 
 sha512sums="
-523516f60b65e649bb9d0e80434b922c348dbe2d4f7bc72ae57dba6a64bd3bfa03b8db327b34c6c09dadb8804ab1373b42ee85215c23fd34c72c06f2b14ded41  linux-meizu-meizu20-fork-v7.3.0_rc3.tar.gz
+3b13b6767e69fb39aa8d3d3569a3e07cf4eee66870615204c15e932bf9c5d072f73a7e3d32f177cb4abf11987f33e66e80a8afb0c499259624eca2db447616d8  linux-meizu-meizu20-fork-v7.3.0_rc3.tar.gz
 14dd84b1f38e7999e57c856a65ed10f08a87d9aff68059c351ede2f70421b48692175b1c66f2e80953eea76a2807aef307faa833220c80f63137c45798a16215  config-meizu-meizu20.aarch64
 "
