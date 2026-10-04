@@ -28,3 +28,6 @@ enable meizu-sensors-barrier.service
 enable meizu-bl-clamp.timer
 # r22: bind the boot-orphan SEs (a80000 NFC + 994000 haptics) every boot.
 enable meizu-bind-nfc-haptics.service
+# audio device day 2026-10-04 (T4c): udev never probes the sound platform
+# device (of modalias T(null)) - idempotent machine-driver bind floor.
+enable meizu-sndcard-bind.service

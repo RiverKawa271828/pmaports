@@ -1,0 +1,18 @@
+[Unit]
+Description=Meizu 20 sndcard: bind the machine driver when udev missed the sound device
+# Audio device day 2026-10-04 (T4c): every component registers (q6apm
+# dais/bedais, cs35l45 x2) yet snd-sc8280xp never probes the sound platform
+# device on its own - card0 only appeared after a manual
+# `echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind`. The of
+# modalias for the sound node renders as "of:NsoundT(null)C..." (no
+# device_type), so the udev coldplug match path is unreliable. Idempotent
+# bind as a boot floor: no-op when the card already exists.
+After=multi-user.target meizu-amps.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'test -d /proc/asound/MEIZU20Inf || echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind || true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

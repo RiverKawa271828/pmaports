@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=23
+pkgrel=24
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -146,6 +146,7 @@ makedepends="devicepkg-dev"
 	meizu-bl-clamp.timer
 	meizu-bind-nfc-haptics.sh
 	meizu-bind-nfc-haptics.service
+	meizu-sndcard-bind.service
 "
 
 build() {
@@ -172,7 +173,7 @@ package() {
 		"$pkgdir"/usr/lib/meizu20/meizu-bind-988000.sh
 	for u in qbootctl-meizu meizu-touch meizu-amps meizu-audio meizu-retimer \
 		meizu-pas meizu-noswr meizu-quiet meizu-memsleep meizu-wfi meizu-grow-rootfs \
-		meizu-dsp-mount devshell; do
+		meizu-dsp-mount devshell meizu-sndcard-bind; do
 		install -Dm644 "$srcdir/$u.service" \
 			"$pkgdir"/usr/lib/systemd/system/$u.service
 	done
@@ -276,7 +277,7 @@ c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-7d1b4b2549b0bb927d10602ecd5a3aa0deeceb6d862b2db926d1e7540c00590b1f68f472837cfe1911c58deb3d81c163e158ab6b6712be98eb9f77f6f0dff66d  80-device-meizu-meizu20.preset
+4ea1cf9cfad72343e017482985e10178f558c288e21c1d69e9a14304b8da6eb15f2ce3290313271d7b34eed019423d9c4cb04f27a085875a585d04f0bfcc0b52  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -311,4 +312,5 @@ a57eb57749291cade9bcdea1b32aabcc3d064bce0421ccd544cb879d501006ae29f02ef4d8b81f40
 a37baab60fcadb3939d2aa32ef8d212744421a0762eb0208d4f7ce10914842228ebb11dd0ce6ace76a4083f317987c502263678a4a2af05bbf61552cfbf04d2c  meizu-bl-clamp.timer
 de85f8f83981eb233ecc93c9d9603e8cae1ab99621d426b9585e25c7976546f7109aa065ec8d363524b6ff057b19fc30d1697941ac04509a6bb972b5ea30306e  meizu-bind-nfc-haptics.sh
 df31b2575dad8c2e69656e2eefdc0b2e9ee3c44286b32f23dc38073ed85c44ac229324408044917d3f649761d38530602fa213447d5106aa59809daacaa1b848  meizu-bind-nfc-haptics.service
+d4b6842b94f8868cadb81244ce5795fef84658e3583b41a1c9f070c488c8c2fcb20c4f8409368e6c2b18ff2810b27d3e6f6465e9e85dcbaf43ec9db613c5f176  meizu-sndcard-bind.service
 "

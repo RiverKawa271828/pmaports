@@ -16,6 +16,11 @@
 #              (ee2f1a64/89416473/88c1590d) + ncm865.
 #   qca/    <- vendor-fw-harvest mainline tree: hmtbtfw20.tlv (26d7ca70)
 #              + hmtnv20.* NVRAM family for the WCN7850 BT side.
+#   cirrus/ <- audio device day 2026-10-04 (T4c PASS): cs35l45-dsp1-spk-prot
+#              wmfw/bin (stock spk-proto renamed to mainline cs_dsp standard;
+#              wmfw md5 6d1234f4 = stock harvest anchor). Mainline cs35l45
+#              requests this exact name on stream preload - T4c playback
+#              verified with these two on device.
 # Userspace DSP files (silime hexagonfs/, /usr/share/qcom) deliberately
 # NOT shipped: never verified on this device - revisit with the SPF
 # audio front, don't grow the known-good baseline blind.
@@ -23,7 +28,7 @@
 maintainer="ri <ri@example.com>"
 pkgname=firmware-meizu-meizu20
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Firmware for Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 url="https://postmarketos.org"
 arch="aarch64"
@@ -40,5 +45,5 @@ package() {
 }
 
 sha512sums="
-fff2ff4605b846d1e41998f01c7400ad95d3149b3f8334f7f6e24f183d63c948eb87f9015598b7effae14185c1c8de78c80fce047fce7b44d58c79929971fc1f  firmware-meizu-meizu20.tar.gz
+14bf3b3165622ce4b5e43de30a3188c1e99a21292f05b66b8ed8c2b5aaba7aed8e02669267eab448ab16dda18207fe19a7e6cd76470c62d20ad7e44ffcb074b3  firmware-meizu-meizu20.tar.gz
 "
