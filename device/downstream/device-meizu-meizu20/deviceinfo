@@ -24,3 +24,9 @@ deviceinfo_screen_height="2400"
 deviceinfo_flash_method="none"
 deviceinfo_flash_pagesize="4096"
 deviceinfo_rootfs_image_sector_size="4096"
+# r38: zramstart defaults to zstd, but the zram module builds its algorithm
+# table at module-init from what is loadable THEN - zstd (=m) is not in the
+# table on first boot, so zramctl fails "Invalid argument" and
+# postmarketos-zram-swap dies (found 2026-10-06, (六十五·续)). lzo-rle IS in
+# the table and is the kernel default anyway.
+deviceinfo_zram_swap_algo="lzo-rle"

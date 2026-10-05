@@ -25,7 +25,12 @@ enable meizu-sensors-ready.service
 enable meizu-sensors-barrier.service
 # r20: brightness clamp guard timer (kernel floor is the primary fix,
 # this bounces sub-floor writes userspace-side within 2s).
-enable meizu-bl-clamp.timer
+# r38: RETIRED - double-obsolete since r55 ((六十五·续2)): the kernel
+# driver floor BL_MIN_BRIGHTNESS=15 clamps at driver level (sub-15 writes
+# never reach the panel), and this script still bounces to the r20-era 50,
+# kicking the legal 15..49 range (S2 calibration) back to 50. The kernel
+# floor IS the guard now; unit files stay shipped for manual experiments.
+disable meizu-bl-clamp.timer
 # r22: bind the boot-orphan SEs (a80000 NFC + 994000 haptics) every boot.
 enable meizu-bind-nfc-haptics.service
 # audio device day 2026-10-04 (T4c): udev never probes the sound platform

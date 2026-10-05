@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=37
+pkgrel=38
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -93,6 +93,14 @@ options="!check !archcheck"
 # mounted read-only at /mnt/dsp - the file service root for the audiopd
 # session daemon (unit ships with temp/hexagonrpcd, started manually
 # per the B2 protocol).
+# r38 (2026-10-06, T3-flash follow-ups, module-leg only): (a) zram fix -
+# deviceinfo_zram_swap_algo="lzo-rle": zramstart defaults to zstd but the
+# zram module's algorithm table is built at module-init and zstd (=m) is
+# not in it on first boot -> "Invalid argument", service failed forever
+# (found during (六十五·续) T4). (b) bl-clamp timer retired in the preset -
+# the r55 kernel floor (BL_MIN=15) is the guard; the r20-era script still
+# bounced to 50, fighting the S2 calibration, and its 2s timer flooded the
+# journal. Unit files stay shipped, preset flips enable -> disable.
 depends="
 	linux-meizu-meizu20
 	postmarketos-base
@@ -291,12 +299,12 @@ package() {
 }
 
 sha512sums="
-c017b27b72b1779a12c5138fb1d9ac73ba0be605d574f58d58aaee2eb6ce6fd9fcd90f64dd7f896e3f5014f69f7dbde9e2e0810a5917bfe0e9b87064eeba2feb  deviceinfo
+baf030d563372c7ea2872d76e9dbaaec1bc0807bbe758187e63c3b70b9cc1ecdfae67c9e0356d3ba4656ab7ea2a95eb7825c5c6cfbe04681913f1e847f38a412  deviceinfo
 96d1f86ff0f64f31a6da123eeff1944e287ce578c29a3a9cae77e00cabb2ed633bb6c433abb728ebcd3030e3b74ab7357ae090af8f8fa5c2c6f7fd0c6868bfa6  modprobe.conf
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-744d9cf6b98ea41a09d68458b8fc1c7d5e36095bec0a76a0f54fcdee0e3751806cc5fd478f21fe58c574f46dd77ef2702dc894f1f1e905bd3205b8f40763f3d4  80-device-meizu-meizu20.preset
+554f3be78f4eafd5ab974c806c9b30ed63c093adec91780d88d56dc74c4fb9a8c441f8f2884bbc16a5ba0f9e6bee1437b7174d6ebdc9ef8900ea23eca62e08c4  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
