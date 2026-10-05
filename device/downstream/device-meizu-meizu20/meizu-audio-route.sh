@@ -56,7 +56,7 @@
 # Idempotent; pure userspace; opens no PCM device (pulseaudio may own
 # hw:0,0) - amixer only touches controls.
 
-CARD=MEIZU20Inf
+CARD=MEIZU20
 BIND=/sys/bus/platform/drivers/snd-sc8280xp/bind
 
 # r27: 150 x 3s = 450s budget. The ADSP boot (which the machine probe

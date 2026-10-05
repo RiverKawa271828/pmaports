@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=36
+pkgrel=37
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -52,7 +52,7 @@ options="!check !archcheck"
 # global drivers_autoprobe, racing = all SEs bound = 880000.i2c external
 # abort = boot panic, hit 3x on 2026-09-29). Audio: UCM2 HiFi profile
 # from silime d70e686 (card conf + HiFi use case; conf.d pointer is a
-# symlink recreated in package()). Card name "MEIZU20Inf" matches the
+# symlink recreated in package()). Card name "MEIZU20" matches the
 # DTS sound model byte-for-byte - do NOT rename either side.
 # r7: UCM v2 - speaker/earpiece are Cirrus CS35L45 x2 (stock dtbo +
 # runtime FDT + vendor wmfw evidence; the WSA883x carry conclusion was
@@ -63,9 +63,9 @@ options="!check !archcheck"
 # meizu-amps.service (After=meizu-touch.service - the drivers_autoprobe
 # race family must stay serialized: pas -> touch -> amps -> retimer);
 # 988000 retimer bind unitized as meizu-retimer.service. AudioReach
-# topology MEIZU20Inf-tplg.bin installed to /usr/lib/firmware/qcom/sm8550/
+# topology MEIZU20-tplg.bin installed to /usr/lib/firmware/qcom/sm8550/
 # (kernel requests exactly this path: sc8280xp.c driver_name "sm8550" x
-# DTS model "MEIZU20Inf"); without it q6apm's component probe fails and
+# DTS model "MEIZU20"); without it q6apm's component probe fails and
 # the card cannot register. Built from meizu20-m1/audio-topology/
 # meizu20.m4 (audioreach-topology pin b4c1510) - keep source and bin in sync.
 # r10: qbootctl.service renamed qbootctl-meizu.service - upstream Alpine
@@ -131,9 +131,9 @@ makedepends="devicepkg-dev"
 	meizu-dsp-mount.sh
 	meizu-sleepmask.conf
 	devshell.service
-	MEIZU20Inf.conf
+	MEIZU20.conf
 	HiFi.conf
-	MEIZU20Inf-tplg.bin
+	MEIZU20-tplg.bin
 	meizu-sensors-root.tgz
 	meizu-sensorspd.service
 	72-meizu20-fastrpc-sensorspd.rules
@@ -266,8 +266,8 @@ package() {
 	# decoded to raw ~0-7 on the current 0..457 controls (boot-time mute),
 	# and pulseaudio only starts using this UCM once it sees the card with
 	# the files present (first happened on a reboot, not in-session).
-	install -Dm644 "$srcdir/MEIZU20Inf.conf" \
-		"$pkgdir"/usr/share/alsa/ucm2/Qualcomm/sm8550/MEIZU20Inf.conf
+	install -Dm644 "$srcdir/MEIZU20.conf" \
+		"$pkgdir"/usr/share/alsa/ucm2/Qualcomm/sm8550/MEIZU20.conf
 	install -Dm644 "$srcdir/HiFi.conf" \
 		"$pkgdir"/usr/share/alsa/ucm2/Qualcomm/sm8550/HiFi.conf
 	# r25: meizu-audio-route pins the playback routing every boot (S1);
@@ -275,19 +275,19 @@ package() {
 	install -Dm755 "$srcdir/meizu-audio-route.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-audio-route.sh
 	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/conf.d/sm8550
-	ln -s ../../Qualcomm/sm8550/MEIZU20Inf.conf \
-		"$pkgdir"/usr/share/alsa/ucm2/conf.d/sm8550/MEIZU20Inf.conf
+	ln -s ../../Qualcomm/sm8550/MEIZU20.conf \
+		"$pkgdir"/usr/share/alsa/ucm2/conf.d/sm8550/MEIZU20.conf
 	# r25: alsa-lib resolves the UCM card by the card LONG name
 	# ("Meizu-MEIZU20-m2381-meizu20", snd_ctl_card_info), not the short
 	# topology name - without this pointer the import fails -2 and
 	# pulseaudio silently falls back to the generic stereo-fallback
 	# profile (found on the 2026-10-04 audio daily round).
-	ln -s ../../Qualcomm/sm8550/MEIZU20Inf.conf \
+	ln -s ../../Qualcomm/sm8550/MEIZU20.conf \
 		"$pkgdir"/usr/share/alsa/ucm2/conf.d/sm8550/Meizu-MEIZU20-m2381-meizu20.conf
 	# r8: AudioReach topology (q6apm component probe requests it; missing
 	# file = component fails = no card). Path is a kernel-side contract.
-	install -Dm644 "$srcdir/MEIZU20Inf-tplg.bin" \
-		"$pkgdir"/usr/lib/firmware/qcom/sm8550/MEIZU20Inf-tplg.bin
+	install -Dm644 "$srcdir/MEIZU20-tplg.bin" \
+		"$pkgdir"/usr/lib/firmware/qcom/sm8550/MEIZU20-tplg.bin
 }
 
 sha512sums="
@@ -315,9 +315,9 @@ d8e490072aa3f10e1493f0ea0ea0f7c260d6fd644c258151203a8153633068a048db7d1db8a14755
 efdd3a0dce1a80d6b58a2d3d023ed810b4c81dada573f8a642f18a08c2772df55cc459d0b84f96b7efde062733a5e3376b12616125eb825b6db64916143e0241  meizu-dsp-mount.sh
 9406153210b8eff1f89690ffb561db9ab83a5261c329907811276eed91fb892bd5443854285932ff4b5b59ef014f3f8b29c2ba4a833b3def69d71f7a91ade196  meizu-sleepmask.conf
 1b110900f88d609d8e555102c653bb21948149db6c9d07547b8d5e4de1f4ece4204ae5c85a027f6654a9b72ccddbc5668183c7845cb95c7dd74030397788dfc7  devshell.service
-23425b29f58ff9dec964d38621ba9151d428e1d6ed581505e46a5049e938eda8efc465d49db7eb60017ace7de4f8a48ef5e662acd672f77bbc77d17b11056922  MEIZU20Inf.conf
+23425b29f58ff9dec964d38621ba9151d428e1d6ed581505e46a5049e938eda8efc465d49db7eb60017ace7de4f8a48ef5e662acd672f77bbc77d17b11056922  MEIZU20.conf
 e926982b977e9ba091838f72de5abc95a644cef5ebd7b70a6fedb06a0e456d3e3bb32dfec7522b0f3ac0a640738b7fbdebd5b47831841fbbc5781093620ce355  HiFi.conf
-8d9b27d6164bba1f090adabaed43c6dd7116c1bc7bcd3dec450c6658be11d5d701b7329f43700b8f23b72661a1f60ee295fb805d80ded819c3fc43f4a0d16717  MEIZU20Inf-tplg.bin
+8d9b27d6164bba1f090adabaed43c6dd7116c1bc7bcd3dec450c6658be11d5d701b7329f43700b8f23b72661a1f60ee295fb805d80ded819c3fc43f4a0d16717  MEIZU20-tplg.bin
 4761799a99b6ef16d127cce87c0deca7fb4ca011cac976c87059ff203bed540ac6475e6eceabafc0e8677acb81713d2f65dfea325d160065c34934a8940e6f66  meizu-sensors-root.tgz
 6ed2a948dd0cbfdec531426102422c281a9e55a103cb44f29dc7b7c335052a987443b10d24738b209716bfad8981919025f85b717b4bab4c03d7af1f050812e9  meizu-sensorspd.service
 4657aceaca40f66fcb7a4dc7fce117ac6b3cabe449ee3aa1a37751ae90c1b03470b9225182f9ec100efc1dfa6d7db1d710960401a728c6a196a444d60149520b  72-meizu20-fastrpc-sensorspd.rules
@@ -331,7 +331,7 @@ a57eb57749291cade9bcdea1b32aabcc3d064bce0421ccd544cb879d501006ae29f02ef4d8b81f40
 a37baab60fcadb3939d2aa32ef8d212744421a0762eb0208d4f7ce10914842228ebb11dd0ce6ace76a4083f317987c502263678a4a2af05bbf61552cfbf04d2c  meizu-bl-clamp.timer
 de85f8f83981eb233ecc93c9d9603e8cae1ab99621d426b9585e25c7976546f7109aa065ec8d363524b6ff057b19fc30d1697941ac04509a6bb972b5ea30306e  meizu-bind-nfc-haptics.sh
 df31b2575dad8c2e69656e2eefdc0b2e9ee3c44286b32f23dc38073ed85c44ac229324408044917d3f649761d38530602fa213447d5106aa59809daacaa1b848  meizu-bind-nfc-haptics.service
-d4b6842b94f8868cadb81244ce5795fef84658e3583b41a1c9f070c488c8c2fcb20c4f8409368e6c2b18ff2810b27d3e6f6465e9e85dcbaf43ec9db613c5f176  meizu-sndcard-bind.service
-48dce87414b11c667e3e5b79cfbd48e6acd02f1fd4d358e5dad5bbc1c02dcdc402969dbc52d8f9e2b867de3935ec70a28ed0d98d92b35307e8a915d32caf17fc  meizu-audio-route.sh
+a96b1921a0f2c912fbef0137205c564ca8245f8ea21de0fc76890eeef9b6506af107c52fbcb18c9706a116c2ad5de106b7f5c9b0617958a97576857fed80c499  meizu-sndcard-bind.service
+effa9a017108b1b72a05f8f1595c84042ca2750ad064edabd2d49dd353435cf692fec402ee2f3d923865c8e4800c1c0543da95d688039f30c0185f134a150cd2  meizu-audio-route.sh
 83c1bbb6022dc97d2c36e8da8f69ac05033c4eb924dc33ddcbd73e40d538cdbbbb81d88279530c7f45f259b019c6a81f56b5374b2072bb5c2ccb8862dd30f4a3  meizu-audio-route.service
 "

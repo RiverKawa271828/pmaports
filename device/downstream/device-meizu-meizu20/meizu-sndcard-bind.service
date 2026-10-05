@@ -11,7 +11,7 @@ After=multi-user.target meizu-amps.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'test -d /proc/asound/MEIZU20Inf || echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind || true'
+ExecStart=/bin/sh -c 'test -d /proc/asound/MEIZU20 || echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind || true'
 RemainAfterExit=yes
 
 [Install]
