@@ -48,21 +48,25 @@ makedepends="
 	"
 
 # fork phase-1 (2026-09-30): source = LOCAL tarball of our fork tree
-# (~/work/linux-mobile-ports; r57 线 = branch meizu20-t4b，
+# (~/work/linux-mobile-ports; r60 线 = branch meizu20-t4b，
 #  meizu20/7.3 停在 T3 micbias 诊断实验态勿用). Regenerate with:
 #   git -C ~/work/linux-mobile-ports archive --format=tar.gz \
 #     --prefix=linux-meizu-meizu20-fork-v$pkgver/ meizu20-t4b
-# Phase-2 switches source to the published fork git URL. silime _commit
-# kept below for provenance.
-_commit="3a94ad18d21de4c685c05937fb646517943910a1"
+# Phase-2 switches source to the published fork git URL. Provenance:
+# fork base = silime master 587858367581 (09-14, 零 meizu 文件; 派生底本
+# = 他 7.3.0-dev 分支的 sm8550-meizu-20-inf.dts, 非携带 commit).
+# (旧注 _commit=3a94ad18d21d 系"审计区间"误说, (六十四) 判废.)
+_commit="587858367581"
 
 source="
 	linux-meizu-meizu20-fork-v$pkgver.tar.gz
 	config-$_flavor.$arch
 "
-# NOTE: the five patches (0001/0002/0009/0010/0011/0012) are NOT listed
-# anymore — the fork tarball already contains them as real commits
-# (see docs/meizu20/silime-exit-carry-list.md §7).
+# NOTE: the six patch files (0001/0002/0009/0010/0011/0012) in this dir
+# are NOT listed in source= anymore — the fork tarball already contains
+# them as real commits. They are kept as frozen documentation only
+# (0001 = DTS delta vs fork base, regenerated 2026-10-06 at 2402245).
+# See docs/meizu20/silime-exit-carry-list.md §7.
 builddir="$srcdir/linux-meizu-meizu20-fork-v$pkgver"
 
 prepare() {
