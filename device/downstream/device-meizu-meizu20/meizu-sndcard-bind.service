@@ -7,11 +7,32 @@ Description=Meizu 20 sndcard: bind the machine driver when udev missed the sound
 # modalias for the sound node renders as "of:NsoundT(null)C..." (no
 # device_type), so the udev coldplug match path is unreliable. Idempotent
 # bind as a boot floor: no-op when the card already exists.
+#
+# Recording round 2026-10-06 (A1): the bind above stopped being sufficient.
+# The global drivers_autoprobe flag is 0 through most of boot (meizu-touch
+# vs meizu-pas arbitration), so any driver module whose udev load lands
+# outside the short autoprobe=1 window registers but never attaches. The
+# sound card has two hard upstream dependencies of that kind:
+#  - lpass_tlmm (6e80000.pinctrl, LPI pinctrl): sound's pinctrl-0 states
+#    (i2s1_default + dmic01/23_default) live there; without it the machine
+#    probe takes EPROBE_DEFER forever (r62 boot: no card and the usual
+#    deferred-probe table stays empty until this bind lands).
+#  - va_macro (6d44000.codec): the va-dai-link consumes it as codec dai;
+#    the module udev-loads fine but nothing attaches it.
+# Order matters: pinctrl first, va_macro second, machine last. modprobe
+# (re)load makes a freshly registered driver attach existing devices even
+# with autoprobe off; the echo-binds are the explicit fallback. Both are
+# idempotent.
 After=multi-user.target meizu-amps.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'test -d /proc/asound/MEIZU20 || echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind || true'
+ExecStart=/bin/sh -c 'test -d /proc/asound/MEIZU20 && exit 0; \
+	modprobe pinctrl_sm8550_lpass_lpi 2>/dev/null || true; \
+	echo 6e80000.pinctrl > /sys/bus/platform/drivers/qcom-sm8550-lpass-lpi-pinctrl/bind 2>/dev/null || true; \
+	modprobe snd_soc_lpass_va_macro 2>/dev/null || true; \
+	echo 6d44000.codec > /sys/bus/platform/drivers/va_macro/bind 2>/dev/null || true; \
+	echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind 2>/dev/null || true'
 RemainAfterExit=yes
 
 [Install]

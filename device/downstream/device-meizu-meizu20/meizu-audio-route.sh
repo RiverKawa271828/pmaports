@@ -113,7 +113,11 @@ for c in \
 	"SPK Digital PCM Volume:$SPK_DIG" \
 	"RCV Digital PCM Volume:$RCV_DIG" \
 	'SPK Analog PCM Volume:3' \
-	"RCV Analog PCM Volume:$RCV_ANA"
+	"RCV Analog PCM Volume:$RCV_ANA" \
+	'MultiMedia3 Mixer TX_CODEC_DMA_TX_3:on,off' \
+	'VA_AIF1_CAP Mixer DEC0:on' \
+	'VA DMIC MUX0:1' \
+	'VA DEC0 MUX:0'
 do
 	name=${c%%:*}
 	val=${c#*:}
