@@ -1,0 +1,13 @@
+## r48 (2026-10-07): the earpiece (RCV, cs35l45@4-0030) is protection-
+## capped at digital 251/457 (r30: 409 trips its short-error guard) -
+## as the stereo left channel it reads as "too quiet" (user call
+## 2026-10-07: "听筒当听筒，不当左声道"). Media = main speaker only,
+## both channels remapped onto it; the earpiece keeps its real job
+## (call audio, future voice stack). UCM/HiFi and the mixer operating
+## point (meizu-audio-route) are untouched. Stereo pairing can be
+## revisited after the fast-switch harvest (per-unit makeup gain,
+## stock forensics day).
+.ifexists module-remap-sink.so
+load-module module-remap-sink sink_name=meizu-spk master=alsa_output.platform-sound.HiFi__Speaker__sink channels=2 channel_map=front-left,front-right master_channel_map=front-right,front-right sink_properties="device.description='Meizu 20 Speaker'"
+.endif
+set-default-sink meizu-spk

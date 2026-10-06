@@ -1,58 +1,26 @@
 [Unit]
-Description=Meizu 20 sndcard: bind the machine driver when udev missed the sound device
-# Audio device day 2026-10-04 (T4c): every component registers (q6apm
-# dais/bedais, cs35l45 x2) yet snd-sc8280xp never probes the sound platform
-# device on its own - card0 only appeared after a manual
-# `echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind`. The of
-# modalias for the sound node renders as "of:NsoundT(null)C..." (no
-# device_type), so the udev coldplug match path is unreliable. Idempotent
-# bind as a boot floor: no-op when the card already exists.
-#
-# Recording round 2026-10-06 (A1): the bind above stopped being sufficient.
-# The global drivers_autoprobe flag is 0 through most of boot (meizu-touch
-# vs meizu-pas arbitration), so any driver module whose udev load lands
-# outside the short autoprobe=1 window registers but never attaches. The
-# sound card has two hard upstream dependencies of that kind:
-#  - lpass_tlmm (6e80000.pinctrl, LPI pinctrl): sound's pinctrl-0 states
-#    (i2s1_default + dmic01/23_default) live there; without it the machine
-#    probe takes EPROBE_DEFER forever (r62 boot: no card and the usual
-#    deferred-probe table stays empty until this bind lands).
-#  - va_macro (6d44000.codec): the va-dai-link consumes it as codec dai;
-#    the module udev-loads fine but nothing attaches it.
-# Order matters: pinctrl first, va_macro second, machine last.
-# Round r63 (2026-10-06): va_macro turned out to set
-# .suppress_bind_attrs=true upstream, so `echo ... > va_macro/bind` can
-# never work (the bind file does not exist; the || true hid it for
-# years). The working explicit attach is a bus-level forced probe:
-#   echo 6d44000.codec > /sys/bus/platform/drivers_probe
-# The udev module load is async, so wait briefly for the va_macro driver
-# to register before probing. All steps idempotent; no-op when the card
-# already exists.
-#
-# Round r64 device day (2026-10-06 evening, camera R1 boot): the drivers_probe
-# kicks above are NOT autoprobe-immune after all - device_attach() honours
-# bus->drivers_autoprobe, and the pas/touch/amps arbitration scripts leave
-# the flag bouncing 0/1 across multi-user. The camera nodes' extra i2c/camss
-# boot work shifted the timing just enough that every kick landed in a
-# autoprobe=0 window: pinctrl + va_macro registered but never attached,
-# machine driver had no probe prerequisites, zero journal trace, no card.
-# Fix: force the flag to 1 here (idempotent; every arbiter restores 1 when
-# done anyway) so the kicks below always attach. Empirically proven
-# sequence on the r64 boot: pinctrl probe -> va_macro probe -> sound probe
-# => card MEIZU20 back without a reboot.
-After=multi-user.target meizu-amps.service
+Description=Meizu 20 sndcard: attach pinctrl/va/machine until card0 exists
+# r48 (2026-10-07): rewrite as a verify-retry loop (meizu-sndcard-bind.sh).
+# The r47 one-shot kicks (autoprobe=1 + three drivers_probe writes) were
+# proven live but failed at EVERY real boot (r64 camera boot, flyme-return
+# boot, 10-06 23:48 boot): the 12ms kick window lands ~600ms before the
+# ADSP is up and inside the arbiter chain's autoprobe=0 windows, the
+# kernel deferred-probe auto-retry never rescues these three, and
+# meizu-audio-route's bind-retry cannot help while pinctrl/va stay
+# unbound (machine probe hard-fails). Full forensics in the script header.
+# Ordered after the whole drivers_autoprobe arbiter chain (same pattern
+# pas -> touch -> amps -> retimer -> bind-nfc-haptics already uses) so no
+# arbiter can flip the flag under us; the loop itself handles the ADSP
+# latency (budget ~6.5min; exits 0 even on give-up - meizu-audio-route
+# remains the failure canary).
+After=multi-user.target meizu-pas.service meizu-touch.service \
+	meizu-amps.service meizu-retimer.service meizu-bind-nfc-haptics.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'test -d /proc/asound/MEIZU20 && exit 0; \
-	echo 1 > /sys/bus/platform/drivers_autoprobe; \
-	modprobe pinctrl_sm8550_lpass_lpi 2>/dev/null || true; \
-	echo 6e80000.pinctrl > /sys/bus/platform/drivers_probe 2>/dev/null || true; \
-	modprobe snd_soc_lpass_va_macro 2>/dev/null || true; \
-	i=0; while [ $i -lt 50 ] && [ ! -d /sys/bus/platform/drivers/va_macro ]; do usleep 200000; i=$((i+1)); done; \
-	echo 6d44000.codec > /sys/bus/platform/drivers_probe 2>/dev/null || true; \
-	echo sound > /sys/bus/platform/drivers_probe 2>/dev/null || true'
+ExecStart=/usr/lib/meizu20/meizu-sndcard-bind.sh
 RemainAfterExit=yes
+TimeoutStartSec=420
 
 [Install]
 WantedBy=multi-user.target
