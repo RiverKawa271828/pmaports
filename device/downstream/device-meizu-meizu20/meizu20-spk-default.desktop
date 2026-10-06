@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Meizu 20 speaker sink default
+Comment=Keep media default sink on meizu-spk (L+R onto the main speaker; earpiece stays earpiece)
+Exec=/usr/lib/meizu20/meizu-spk-default.sh
+NoDisplay=true
+X-KDE-autostart-phase=2
