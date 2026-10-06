@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=50
+pkgrel=51
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -188,6 +188,13 @@ makedepends="devicepkg-dev"
 	meizu20-spk-mono.pa
 	meizu-spk-default.sh
 	meizu20-spk-default.desktop
+	ddcutilrc
+	61-meizu20-i2c-uaccess.rules
+	nm-initrd-generator.sh
+	fingerprint-auth
+	smartcard-auth
+	postlogin
+	meizu20-pulseaudio-no-x11.conf
 "
 
 build() {
@@ -332,6 +339,36 @@ package() {
 	# file = component fails = no card). Path is a kernel-side contract.
 	install -Dm644 "$srcdir/MEIZU20-tplg.bin" \
 		"$pkgdir"/usr/lib/firmware/qcom/sm8550/MEIZU20-tplg.bin
+	# r51: boot-noise cleanup quartet (all four verified live 2026-10-07):
+	# 1) ddcutil EACCES storm at session start (powerdevil libddcutil scan):
+	#    ignore every i2c bus at detection level + let the scan open the
+	#    nodes via uaccess (EACCES 34 -> 0 per init, backlight unaffected).
+	install -Dm644 "$srcdir/ddcutilrc" \
+		"$pkgdir"/etc/xdg/ddcutil/ddcutilrc
+	install -Dm644 "$srcdir/61-meizu20-i2c-uaccess.rules" \
+		"$pkgdir"/etc/udev/rules.d/61-meizu20-i2c-uaccess.rules
+	# 2) pulse module-x11-xsmp error + failing app-pulseaudio@autostart
+	#    unit (X11 session-manager modules can never connect on this
+	#    Wayland-only port): replace the autostart Exec with a plain
+	#    `pulseaudio --start`.
+	install -Dm644 "$srcdir/meizu20-pulseaudio-no-x11.conf" \
+		"$pkgdir"/usr/lib/systemd/user/app-pulseaudio@autostart.service.d/meizu20-no-x11.conf
+	# 3) nm-initrd-generator.sh exits 1 every boot (networkmanager-systemd
+	#    generator on a non-initrd system): /etc shadows /usr/lib per
+	#    systemd.generator(7).
+	install -Dm755 "$srcdir/nm-initrd-generator.sh" \
+		"$pkgdir"/etc/systemd/system-generators/nm-initrd-generator.sh
+	# 4) kde-fingerprint/kde-smartcard reference fingerprint-auth,
+	#    smartcard-auth and postlogin PAM stacks that no package ships
+	#    here: comment-only stubs = empty substack, no more
+	#    _pam_load_conf_file errors. Replace with real stacks if
+	#    fingerprint/smartcard support ever lands.
+	install -Dm644 "$srcdir/fingerprint-auth" \
+		"$pkgdir"/etc/pam.d/fingerprint-auth
+	install -Dm644 "$srcdir/smartcard-auth" \
+		"$pkgdir"/etc/pam.d/smartcard-auth
+	install -Dm644 "$srcdir/postlogin" \
+		"$pkgdir"/etc/pam.d/postlogin
 }
 
 sha512sums="
@@ -379,4 +416,11 @@ bf4adc74d0eee823ac204985b91aa5da9a07769a75dbe66f7016ae08ec84751beb55542d913b2377
 7ffcd7cfa882e7413e43da29036dfb249ed8342cbe8c6637d7f9890348573069b8765973089a151bcd6bfbad01d9e440b64915460b4d3534afd1b58df9374107  meizu20-spk-mono.pa
 ed594130babbb6fee26e09656baa70ae97f2653c50abce509140c7f955e640b8c02cdb83a0a8a5a2e7a3eecdf64f176f003ab50567a6929412c97b92f25cfb6b  meizu-spk-default.sh
 0d1d5c353535f297498c7863e9ee53183d82c92cdc79f0ee41cd199fcd742ae6f9e4da2ce26cc3a7321db9c33b0056d37fc8f4069fc55f229c9a418f93141856  meizu20-spk-default.desktop
+d3ddf06d51b7220a28ad2f4722ab5cd5b8e589c3570574ad5ba81c3b825d74b7c768c5831a927ad2cf06f917fc0fb2d3cd479c0e67fd032e3019f854ea5bbcd8  ddcutilrc
+145cf3cf519836c127a1a01e34fc53422f031ccb685b1651f56512837d54789bf4f41dc63e3f2a74a5124e8a2819b93da93410a1441c4f0387050977c4861e53  61-meizu20-i2c-uaccess.rules
+6c99adc35a7c5d96808ce2f4344550023c43030efb7485f0b06737fceb42247aa4d004d1fd5c4843a53ad19d69ca410502f709f930c2cb9bf1cf06b20e0416df  nm-initrd-generator.sh
+8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  fingerprint-auth
+8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  smartcard-auth
+8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  postlogin
+b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080ccda48d6d6aacf83f503a104299283afb4cde306a8e17c9ee  meizu20-pulseaudio-no-x11.conf
 "

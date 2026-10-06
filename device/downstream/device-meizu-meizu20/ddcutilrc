@@ -1,0 +1,2 @@
+[Global]
+options: --ignore-bus=0 --ignore-bus=1 --ignore-bus=2 --ignore-bus=3 --ignore-bus=4 --ignore-bus=5 --ignore-bus=6 --ignore-bus=7 --disable-watch-displays

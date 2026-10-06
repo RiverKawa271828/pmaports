@@ -1,0 +1,3 @@
+# Meizu 20 stub (device pkg r51): referenced by kde-fingerprint/kde-smartcard
+# PAM stacks; no fingerprint/smartcard support in this port - resolve to an
+# empty stack instead of _pam_load_conf_file errors at every session start.

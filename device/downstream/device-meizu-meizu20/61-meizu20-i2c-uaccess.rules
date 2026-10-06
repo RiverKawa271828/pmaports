@@ -1,0 +1,6 @@
+# Meizu 20 (device pkg r51): grant the active session user access to i2c-dev
+# nodes so libddcutil's init scan (powerdevil) can open them - without this it
+# logs an EACCES storm per session start. Pair with /etc/xdg/ddcutil/ddcutilrc
+# which ignores every bus at detection level, so no DDC traffic is ever
+# generated on these buses (touch/amps/retimer stay silent to userspace).
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-[0-9]*", TAG+="uaccess"
