@@ -19,10 +19,16 @@ Description=Meizu 20 sndcard: bind the machine driver when udev missed the sound
 #    deferred-probe table stays empty until this bind lands).
 #  - va_macro (6d44000.codec): the va-dai-link consumes it as codec dai;
 #    the module udev-loads fine but nothing attaches it.
-# Order matters: pinctrl first, va_macro second, machine last. modprobe
-# (re)load makes a freshly registered driver attach existing devices even
-# with autoprobe off; the echo-binds are the explicit fallback. Both are
-# idempotent.
+# Order matters: pinctrl first, va_macro second, machine last.
+# Round r63 (2026-10-06): va_macro turned out to set
+# .suppress_bind_attrs=true upstream, so `echo ... > va_macro/bind` can
+# never work (the bind file does not exist; the || true hid it for
+# years). The working explicit attach is a bus-level forced probe:
+#   echo 6d44000.codec > /sys/bus/platform/drivers_probe
+# which runs bus_rescan_devices_helper() and honours nothing - it probes
+# even with drivers_autoprobe=0. The udev module load is async, so wait
+# briefly for the va_macro driver to register before probing. All steps
+# idempotent; no-op when the card already exists.
 After=multi-user.target meizu-amps.service
 
 [Service]
@@ -31,8 +37,10 @@ ExecStart=/bin/sh -c 'test -d /proc/asound/MEIZU20 && exit 0; \
 	modprobe pinctrl_sm8550_lpass_lpi 2>/dev/null || true; \
 	echo 6e80000.pinctrl > /sys/bus/platform/drivers/qcom-sm8550-lpass-lpi-pinctrl/bind 2>/dev/null || true; \
 	modprobe snd_soc_lpass_va_macro 2>/dev/null || true; \
-	echo 6d44000.codec > /sys/bus/platform/drivers/va_macro/bind 2>/dev/null || true; \
-	echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind 2>/dev/null || true'
+	i=0; while [ $i -lt 50 ] && [ ! -d /sys/bus/platform/drivers/va_macro ]; do usleep 200000; i=$((i+1)); done; \
+	echo 6d44000.codec > /sys/bus/platform/drivers_probe 2>/dev/null || true; \
+	echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind 2>/dev/null || true; \
+	echo sound > /sys/bus/platform/drivers_probe 2>/dev/null || true'
 RemainAfterExit=yes
 
 [Install]
