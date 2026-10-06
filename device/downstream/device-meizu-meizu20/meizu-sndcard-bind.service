@@ -25,21 +25,32 @@ Description=Meizu 20 sndcard: bind the machine driver when udev missed the sound
 # never work (the bind file does not exist; the || true hid it for
 # years). The working explicit attach is a bus-level forced probe:
 #   echo 6d44000.codec > /sys/bus/platform/drivers_probe
-# which runs bus_rescan_devices_helper() and honours nothing - it probes
-# even with drivers_autoprobe=0. The udev module load is async, so wait
-# briefly for the va_macro driver to register before probing. All steps
-# idempotent; no-op when the card already exists.
+# The udev module load is async, so wait briefly for the va_macro driver
+# to register before probing. All steps idempotent; no-op when the card
+# already exists.
+#
+# Round r64 device day (2026-10-06 evening, camera R1 boot): the drivers_probe
+# kicks above are NOT autoprobe-immune after all - device_attach() honours
+# bus->drivers_autoprobe, and the pas/touch/amps arbitration scripts leave
+# the flag bouncing 0/1 across multi-user. The camera nodes' extra i2c/camss
+# boot work shifted the timing just enough that every kick landed in a
+# autoprobe=0 window: pinctrl + va_macro registered but never attached,
+# machine driver had no probe prerequisites, zero journal trace, no card.
+# Fix: force the flag to 1 here (idempotent; every arbiter restores 1 when
+# done anyway) so the kicks below always attach. Empirically proven
+# sequence on the r64 boot: pinctrl probe -> va_macro probe -> sound probe
+# => card MEIZU20 back without a reboot.
 After=multi-user.target meizu-amps.service
 
 [Service]
 Type=oneshot
 ExecStart=/bin/sh -c 'test -d /proc/asound/MEIZU20 && exit 0; \
+	echo 1 > /sys/bus/platform/drivers_autoprobe; \
 	modprobe pinctrl_sm8550_lpass_lpi 2>/dev/null || true; \
-	echo 6e80000.pinctrl > /sys/bus/platform/drivers/qcom-sm8550-lpass-lpi-pinctrl/bind 2>/dev/null || true; \
+	echo 6e80000.pinctrl > /sys/bus/platform/drivers_probe 2>/dev/null || true; \
 	modprobe snd_soc_lpass_va_macro 2>/dev/null || true; \
 	i=0; while [ $i -lt 50 ] && [ ! -d /sys/bus/platform/drivers/va_macro ]; do usleep 200000; i=$((i+1)); done; \
 	echo 6d44000.codec > /sys/bus/platform/drivers_probe 2>/dev/null || true; \
-	echo sound > /sys/bus/platform/drivers/snd-sc8280xp/bind 2>/dev/null || true; \
 	echo sound > /sys/bus/platform/drivers_probe 2>/dev/null || true'
 RemainAfterExit=yes
 
