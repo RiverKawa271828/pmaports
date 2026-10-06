@@ -24,7 +24,11 @@
 #      T4c direct-drive era; degradation tracks the r32 DSP path and
 #      the r33-r35 full-register raise.
 #    Operating point (r44, 2026-10-06 loudness round, user-tested):
-#      stream volume 58981 (90%, user-called conservative compromise),
+#      stream volume 12740 (r46 loudness-cap calibration: user ear-judged
+#      slider 60% = flyme 100% = hardware-safe max; pulse slider is cubic
+#      (60% = 0.216 linear, device-verified), so cap = 0.216*58981 = 12740.
+#      Slider 100% now lands exactly on the old 60% loudness and CANNOT go
+#      beyond it - no software/hardware stage above it),
 #      SPK Digital 409 / Analog 3 (= the stock raw registers: flyme
 #      playing dump 817-vendored == 409; direct drive has no limiter
 #      compression, so perceived loudness runs above flyme at the
@@ -73,7 +77,7 @@ test -d "/proc/asound/$CARD" || {
 
 for c in \
 	'SECONDARY_MI2S_RX Audio Mixer MultiMedia1:on,off' \
-	'stream0.vol_ctrl0 MultiMedia1 Playback Volu:58981' \
+	'stream0.vol_ctrl0 MultiMedia1 Playback Volu:12740' \
 	'RCV DACPCM Source:1' \
 	'SPK DACPCM Source:2' \
 	'SPK AMP Enable Switch:on' \
@@ -93,7 +97,7 @@ do
 		|| echo "meizu-audio-route: FAILED cset '$name' '$val'"
 done
 
-echo "meizu-audio-route: $CARD bound and pinned (direct drive: RCV=ASP_RX1 251/1, SPK=ASP_RX2 409/3, stream=90%)"
+echo "meizu-audio-route: $CARD bound and pinned (direct drive: RCV=ASP_RX1 251/1, SPK=ASP_RX2 409/3, stream=12740)"
 
 # r33 drift re-pin, r41 targets: pulseaudio applies UCM (which pins its
 # own numbers) once it claims the card and again on every profile
