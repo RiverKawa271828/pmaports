@@ -23,15 +23,19 @@
 #      glitch domain. User timeline: clean + real-time exactly in the
 #      T4c direct-drive era; degradation tracks the r32 DSP path and
 #      the r33-r35 full-register raise.
-#    Operating point (r43, 2026-10-06 user max-volume complaint):
-#      stream volume 58981 (90%, user-called conservative compromise after the
-#      direct-drive fix; digital 251 sits ~4dB below the known overload
-#      point, music crest adds ~10dB more, zero short errors observed at
-#      full slider - do NOT play full-scale sines at max volume),
-#      SPK Digital 251 / Analog 3, RCV Digital 183 / Analog 1.
-#    Loudness reserve beyond this requires the through-DSP path
-#    (limiter) or the fast-switch scene deltas - revisit only with a
-#    stock boot day.
+#    Operating point (r44, 2026-10-06 loudness round, user-tested):
+#      stream volume 58981 (90%, user-called conservative compromise),
+#      SPK Digital 409 / Analog 3 (= the stock raw registers: flyme
+#      playing dump 817-vendored == 409; direct drive has no limiter
+#      compression, so perceived loudness runs above flyme at the
+#      same slider position), RCV Digital 251 / Analog 1 (small unit:
+#      r30 proved 409-direct trips its short-error protection; 251 =
+#      55% of the trip point). Zero short/PLL errors through the
+#      user's max-volume music session. Do NOT play full-scale sines
+#      at max volume.
+#    True stock parity (limiter + fast-switch scene deltas + flyme
+#    volume curve) = through-DSP path with the kernel preload fix -
+#    deferred to the flyme stock forensics day (user call, 2026-10-06).
 #    Direct-mode stereo (slot0->@30 L, slot1->@31 R) pending user ear
 #    re-judgment on this configuration.
 #    - the stream volume must be nonzero or the FE stays mute; the
@@ -74,8 +78,8 @@ for c in \
 	'SPK DACPCM Source:2' \
 	'SPK AMP Enable Switch:on' \
 	'RCV AMP Enable Switch:on' \
-	'SPK Digital PCM Volume:251' \
-	'RCV Digital PCM Volume:183' \
+	'SPK Digital PCM Volume:409' \
+	'RCV Digital PCM Volume:251' \
 	'SPK Analog PCM Volume:3' \
 	'RCV Analog PCM Volume:1' \
 	'MultiMedia3 Mixer TX_CODEC_DMA_TX_3:on,off' \
@@ -89,7 +93,7 @@ do
 		|| echo "meizu-audio-route: FAILED cset '$name' '$val'"
 done
 
-echo "meizu-audio-route: $CARD bound and pinned (direct drive: RCV=ASP_RX1 183/1, SPK=ASP_RX2 251/3, stream=90%)"
+echo "meizu-audio-route: $CARD bound and pinned (direct drive: RCV=ASP_RX1 251/1, SPK=ASP_RX2 409/3, stream=90%)"
 
 # r33 drift re-pin, r41 targets: pulseaudio applies UCM (which pins its
 # own numbers) once it claims the card and again on every profile
@@ -99,7 +103,7 @@ echo "meizu-audio-route: $CARD bound and pinned (direct drive: RCV=ASP_RX1 183/1
 i=0
 while [ $i -lt 20 ]; do
 	sleep 30
-	for pair in "RCV:183" "SPK:251"; do
+	for pair in "RCV:251" "SPK:409"; do
 		amp=${pair%%:*}
 		target=${pair#*:}
 		cur=$(amixer -c 0 cget "name=$amp Digital PCM Volume" 2>/dev/null \
