@@ -8,51 +8,37 @@
 #    the bind until card0 exists. The separate meizu-sndcard-bind unit
 #    stays as a harmless early belt-and-braces attempt.
 #
-# 2. PIN THE OPERATING POINT (r32): signal path = THROUGH the CS35L45
-#    on-chip DSP (DACPCM Source=DSP_TX1) with the packaged speaker-
-#    protection firmware - this is how stock/flyme runs both amps
-#    (mixer_paths "spk_prot": DSP1 Enable=1 + Digital 817 == our raw
-#    409); the DSP limits in real time from IV sense, which is why
-#    flyme can drive the amps at full registers without tripping the
-#    short-error protection (our r30 409-through-DSP tests: zero
-#    errors, user reports less noise vs the bypass path).
-#    SPK (@31, bottom) = stock registers: Digital 409 / Analog 3.
-#    RCV (@30, top)    = r33: stock full registers (Digital 409 / Analog 3)
-#    once the per-amp stack is in place - kernel fork b52b99bfc6de builds
-#    wm_adsp part names from sound-name-prefix so @30 loads the RCV-tuned
-#    DSP limiter (firmware r3, harvested from this device's stock vendor
-#    image), and @30 full gain without THAT limiter would be the exact
-#    mistake stock avoids (small driver, spk limiter is not tuned for it).
-#    Guard (both required, else stay at T4c 183/1):
-#      - firmware files on disk: cirrus/cs35l45-rcv-dsp1-spk-prot.{wmfw,bin}
-#      - kernel log shows wm_adsp part = "cs35l45-rcv" (new driver active)
-#    The wmfw itself is only requested at first stream preload, so there
-#    is no dmesg success trace at route time - file presence + part string
-#    is the practical proxy; the flashing-session acceptance (short error
-#    count + ear) closes the loop.
-#    Stereo VERIFIED on-device (2026-10-05, user ear): L=top @30 (rcv,
-#    loads left.bin protection), R=bottom @31 (spk, right.bin) - matches
-#    the stock per-amp protection naming exactly, no swap needed. The
-#    old "R never reaches @30" verdict was the 183/1 near-mute masking
-#    the left channel; APM live print ch=2 confirms the DSP receives
-#    stereo (T2 closed, no copp defect).
-#    r34 loudness round (2026-10-05 device session, user ear A/B): the
-#    T4c-era pads are retired now that the per-amp DSP protection is
-#    verified (0 short errors through 0dBFS sine loops at full gain):
-#      - stream volume 26214 (40%, -8dB bypass-era pad) -> 65535
-#      - digital 409 (0dB, stock route value) -> 457 (+12dB, mainline
-#        ALSA max; flyme max slider lands here or below - their XML 817
-#        is raw 0dB, their playing dump was below max)
-#      - analog stays 3 (19dB = field max, 2-bit AMP_GAIN_PCM)
-#    Remaining loudness reserve = flyme fast-switch scene deltas
-#    (cirrus,fast-switch: spk/rcv-music|game|movie|voice.txt, vendored
-#    MBC ceiling retunes) - never harvested, needs a stock boot day.
+# 2. PIN THE OPERATING POINT (r41): signal path = DIRECT DRIVE, DSP out
+#    of the path (RCV DACPCM=ASP_RX1 slot0/L, SPK DACPCM=ASP_RX2 slot1/R;
+#    the T4c-era default that the r32..r35 csets had overridden).
+#    Verdict basis (2026-10-06, unattended forensics + user timeline):
+#    - through-DSP (DACPCM=DSP_TX1, r32..r40) paid a FULL wmfw+bin
+#      re-download on EVERY stream start (cs_dsp_power_down drops the
+#      image; journal shows ~2s of DSP1 firmware lines per stream, both
+#      amps) = the "volume key needs several presses" latency, plus
+#      PLL-unlock / global-error-239 storms while the DSP ran = the
+#      noise/snow domain.
+#    - direct drive shows ZERO kernel audio lines across park/resume
+#      cycles (verified on-device) = real-time start, no DSP-path
+#      glitch domain. User timeline: clean + real-time exactly in the
+#      T4c direct-drive era; degradation tracks the r32 DSP path and
+#      the r33-r35 full-register raise.
+#    Operating point = the T4c-era proven-safe registers (direct drive
+#    has NO on-chip limiter in path, so the conservative numbers stand:
+#    stock 409 on @30 direct tripped short-error at r30):
+#      stream volume 26214 (40%, -8dB), SPK Digital 251 / Analog 3,
+#      RCV Digital 183 / Analog 1.
+#    Loudness reserve now requires the through-DSP path (limiter) or
+#    the fast-switch scene deltas - revisit only with a stock boot day.
+#    Direct-mode stereo (slot0->@30 L, slot1->@31 R) pending user ear
+#    re-judgment on this configuration.
 #    - the stream volume must be nonzero or the FE stays mute; the
 #      44-char truncated name below IS the real control name (the full
 #      "...Playback Volume" name does not exist - set it and you
 #      silently keep the zero default).
-# Values converge with the r32 UCM files so pulseaudio's own UCM init
-# (same numbers) cannot undo this operating point.
+# Values deliberately do NOT converge with the UCM files here (UCM pins
+# its own numbers on profile enable); the drift re-pin loop below is
+# the authority for the digital/analog levels.
 # Idempotent; pure userspace; opens no PCM device (pulseaudio may own
 # hw:0,0) - amixer only touches controls.
 
@@ -79,41 +65,17 @@ test -d "/proc/asound/$CARD" || {
 # log doubles as mixer-state evidence (the vanishing-controls bug made
 # silent cset failures indistinguishable from successes).
 
-# r33: RCV full registers only with the per-amp firmware stack in place.
-# r34: full registers raised to the +12dB digital headroom (see header).
-# r35: kernel-log guard replaced - the dmesg ring fills up (GPR event
-# spam floods it by late boot) and the probe-time part string is gone
-# by the time a late route/restart runs. The new driver is identified
-# by its module image instead: 'wm_adsp firmware part' only exists in
-# the fork build (b52b99bfc6de+), and /lib/modules/$(uname -r) is by
-# definition the module set of the RUNNING kernel. Fallback direction
-# stays safe (no match = gentle 183/1).
-RCV_DIG=183
-RCV_ANA=1
-SPK_DIG=457
-KO=/lib/modules/$(uname -r)/kernel/sound/soc/codecs/snd-soc-cs35l45.ko
-if [ -f /lib/firmware/cirrus/cs35l45-rcv-dsp1-spk-prot.wmfw ] \
-	&& [ -f /lib/firmware/cirrus/cs35l45-rcv-dsp1-spk-prot.bin ] \
-	&& { dmesg | grep -q 'wm_adsp firmware part = "cs35l45-rcv"' \
-		|| grep -q 'wm_adsp firmware part' "$KO" 2>/dev/null; }; then
-	RCV_DIG=457
-	RCV_ANA=3
-	echo "meizu-audio-route: per-amp RCV stack detected - @30 full registers 457/3"
-else
-	echo "meizu-audio-route: per-amp RCV stack NOT detected - @30 stays gentle 183/1"
-fi
-
 for c in \
 	'SECONDARY_MI2S_RX Audio Mixer MultiMedia1:on,off' \
-	'stream0.vol_ctrl0 MultiMedia1 Playback Volu:65535' \
-	'SPK DACPCM Source:3' \
-	'RCV DACPCM Source:3' \
+	'stream0.vol_ctrl0 MultiMedia1 Playback Volu:26214' \
+	'RCV DACPCM Source:1' \
+	'SPK DACPCM Source:2' \
 	'SPK AMP Enable Switch:on' \
 	'RCV AMP Enable Switch:on' \
-	"SPK Digital PCM Volume:$SPK_DIG" \
-	"RCV Digital PCM Volume:$RCV_DIG" \
+	'SPK Digital PCM Volume:251' \
+	'RCV Digital PCM Volume:183' \
 	'SPK Analog PCM Volume:3' \
-	"RCV Analog PCM Volume:$RCV_ANA" \
+	'RCV Analog PCM Volume:1' \
 	'MultiMedia3 Mixer TX_CODEC_DMA_TX_3:on,off' \
 	'VA_AIF1_CAP Mixer DEC0:on' \
 	'VA DMIC MUX0:1' \
@@ -125,19 +87,17 @@ do
 		|| echo "meizu-audio-route: FAILED cset '$name' '$val'"
 done
 
-echo "meizu-audio-route: $CARD bound and pinned (RCV=$RCV_DIG/$RCV_ANA, SPK=$SPK_DIG/3, stream=100%)"
+echo "meizu-audio-route: $CARD bound and pinned (direct drive: RCV=ASP_RX1 183/1, SPK=ASP_RX2 251/3, stream=40%)"
 
-# r33 drift re-pin: pulseaudio applies UCM (which still pins RCV 183/1 -
-# UCM csets cannot carry the runtime guard) once it claims the card, and
-# again on every profile enable. Re-assert RCV (and SPK, r34: UCM pins
-# SPK 409) when they drifted. Only the loudness direction can "lose"
-# (reverted to 183/409 = quieter, never louder);
-# 30s x 20 covers late pulse starts; after the loop a manual profile
-# switch may revert @30 until next boot - accepted residual, safe direction.
+# r33 drift re-pin, r41 targets: pulseaudio applies UCM (which pins its
+# own numbers) once it claims the card and again on every profile
+# enable. Re-assert the T4c-era point when it drifted; the loudness
+# direction is intentionally NOT guarded anymore (the 457/full-register
+# era is retired, see header).
 i=0
 while [ $i -lt 20 ]; do
 	sleep 30
-	for pair in "RCV:$RCV_DIG" "SPK:$SPK_DIG"; do
+	for pair in "RCV:183" "SPK:251"; do
 		amp=${pair%%:*}
 		target=${pair#*:}
 		cur=$(amixer -c 0 cget "name=$amp Digital PCM Volume" 2>/dev/null \
@@ -145,10 +105,8 @@ while [ $i -lt 20 ]; do
 		if [ "$cur" != "$target" ]; then
 			amixer -c 0 cset "name=$amp Digital PCM Volume" "$target" >/dev/null \
 				|| echo "meizu-audio-route: FAILED re-pin $amp Digital"
-			# UCM also drags RCV analog back to 1; only re-assert it here
-			# so a failed digital cset never leaves analog mismatched.
 			if [ "$amp" = "RCV" ]; then
-				amixer -c 0 cset "name=RCV Analog PCM Volume" "$RCV_ANA" >/dev/null \
+				amixer -c 0 cset "name=RCV Analog PCM Volume" 1 >/dev/null \
 					|| echo "meizu-audio-route: FAILED re-pin RCV Analog"
 			fi
 			echo "meizu-audio-route: re-pinned $amp (was $cur, target $target)"
