@@ -23,13 +23,15 @@
 #      glitch domain. User timeline: clean + real-time exactly in the
 #      T4c direct-drive era; degradation tracks the r32 DSP path and
 #      the r33-r35 full-register raise.
-#    Operating point = the T4c-era proven-safe registers (direct drive
-#    has NO on-chip limiter in path, so the conservative numbers stand:
-#    stock 409 on @30 direct tripped short-error at r30):
-#      stream volume 26214 (40%, -8dB), SPK Digital 251 / Analog 3,
-#      RCV Digital 183 / Analog 1.
-#    Loudness reserve now requires the through-DSP path (limiter) or
-#    the fast-switch scene deltas - revisit only with a stock boot day.
+#    Operating point (r43, 2026-10-06 user max-volume complaint):
+#      stream volume 58981 (90%, user-called conservative compromise after the
+#      direct-drive fix; digital 251 sits ~4dB below the known overload
+#      point, music crest adds ~10dB more, zero short errors observed at
+#      full slider - do NOT play full-scale sines at max volume),
+#      SPK Digital 251 / Analog 3, RCV Digital 183 / Analog 1.
+#    Loudness reserve beyond this requires the through-DSP path
+#    (limiter) or the fast-switch scene deltas - revisit only with a
+#    stock boot day.
 #    Direct-mode stereo (slot0->@30 L, slot1->@31 R) pending user ear
 #    re-judgment on this configuration.
 #    - the stream volume must be nonzero or the FE stays mute; the
@@ -67,7 +69,7 @@ test -d "/proc/asound/$CARD" || {
 
 for c in \
 	'SECONDARY_MI2S_RX Audio Mixer MultiMedia1:on,off' \
-	'stream0.vol_ctrl0 MultiMedia1 Playback Volu:26214' \
+	'stream0.vol_ctrl0 MultiMedia1 Playback Volu:58981' \
 	'RCV DACPCM Source:1' \
 	'SPK DACPCM Source:2' \
 	'SPK AMP Enable Switch:on' \
@@ -87,7 +89,7 @@ do
 		|| echo "meizu-audio-route: FAILED cset '$name' '$val'"
 done
 
-echo "meizu-audio-route: $CARD bound and pinned (direct drive: RCV=ASP_RX1 183/1, SPK=ASP_RX2 251/3, stream=40%)"
+echo "meizu-audio-route: $CARD bound and pinned (direct drive: RCV=ASP_RX1 183/1, SPK=ASP_RX2 251/3, stream=90%)"
 
 # r33 drift re-pin, r41 targets: pulseaudio applies UCM (which pins its
 # own numbers) once it claims the card and again on every profile
