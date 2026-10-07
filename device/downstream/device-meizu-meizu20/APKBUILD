@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=52
+pkgrel=53
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -130,6 +130,12 @@ options="!check !archcheck"
 # against the kernel floor. Presets and apk upgrades never touch existing
 # /etc symlinks, so the durable fix is not shipping the units at all;
 # live device disabled by hand in the same round.
+# r53 (2026-10-07, Release rootfs 首航暴雷修复轮): depends += hexagonrpcd
+# 三件（主包+systemd+udev 同装纪律）。meizu-sensorspd.service 以 User=fastrpc
+# 拉起 /usr/bin/hexagonrpcd，但 hexagonrpcd 包此前从未进 depends——老 rootfs
+# 靠当年手工 apk add，纯官方预装 rootfs 缺包缺用户 → sensorspd Unknown-user
+# 秒败循环 → sensors-barrier 干等 300s 超时才放行 plasma = 开机极慢
+#（Release r66 rootfs 上机实锤，2026-10-07）。
 depends="
 	linux-meizu-meizu20
 	postmarketos-base
@@ -141,6 +147,9 @@ depends="
 	firmware-meizu-meizu20
 	e2fsprogs-extra
 	discover-backend-apk
+	hexagonrpcd
+	hexagonrpcd-systemd
+	hexagonrpcd-udev
 "
 makedepends="devicepkg-dev"
 	source="
