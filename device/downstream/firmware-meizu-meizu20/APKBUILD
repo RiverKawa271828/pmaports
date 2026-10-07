@@ -12,7 +12,7 @@
 #              the bridge is board-DTS firmware-name on &iris (fork commit
 #              02e305cf) - never rename files here.
 #   ath12k/ <- silime meizu-20-inf-firmware (mainline naming; the set the
-#              现网5G verified days ran): WCN7850 hw2.0 amss/board-2/m3
+#              5G verified days ran): WCN7850 hw2.0 amss/board-2/m3
 #              (ee2f1a64/89416473/88c1590d) + ncm865.
 #   qca/    <- vendor-fw-harvest mainline tree: hmtbtfw20.tlv (26d7ca70)
 #              + hmtnv20.* NVRAM family for the WCN7850 BT side.
