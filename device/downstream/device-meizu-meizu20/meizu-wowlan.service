@@ -19,6 +19,11 @@ Wants=sys-subsystem-net-devices-wlan0.device
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# r57: 老装机（r53 时代）留下的 sleep 封条（/etc/systemd/system/{sleep,suspend,hibernate}.target
+# → /dev/null）不会随包升级消失——r54 只删了创建它们的 tmpfiles 规则，现场符号链接还在，
+# logind 路挂起会被 "Unit suspend.target is masked, refusing operation" 拒（2026-10-09 在机实锤）。
+# 此处顺手收敛到 r54 起的目标态「无封条」；未封条时 unmask 是 no-op，失败也不拦 unit（- 前缀）。
+ExecStartPre=-/usr/bin/systemctl unmask sleep.target suspend.target hibernate.target
 # wowlan is a phy-level command: `iw dev wlan0 wowlan ...` is rejected by iw
 # (usage dump, unit fails - seen on the r55 install). Single wiphy on this
 # board, so phy0 is deterministic; the netdev dependency above only guards
