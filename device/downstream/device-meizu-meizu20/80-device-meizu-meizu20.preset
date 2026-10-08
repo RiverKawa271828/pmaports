@@ -10,6 +10,8 @@ enable meizu-pas.service
 enable meizu-quiet.service
 enable meizu-memsleep.service
 enable meizu-wfi.service
+# r55: WoWLAN —— 睡=不断连（cfg80211 wow 块；无它则睡即 deauth/WiFi 死）
+enable meizu-wowlan.service
 enable meizu-noswr.service
 enable meizu-grow-rootfs.service
 # r13: read-only dsp mount feeding the audiopd file service (the audiopd

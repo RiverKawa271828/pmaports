@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=54
+pkgrel=56
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -136,7 +136,15 @@ options="!check !archcheck"
 # 靠当年手工 apk add，纯官方预装 rootfs 缺包缺用户 → sensorspd Unknown-user
 # 秒败循环 → sensors-barrier 干等 300s 超时才放行 plasma = 开机极慢
 #（Release r66 rootfs 上机实锤，2026-10-07）。
+# r55 (2026-10-09, WoWLAN 轮): meizu-wowlan.service 新增 —— 开机
+# `iw dev wlan0 wowlan enable magic-packet`。有 wowlan 配置后 cfg80211 的
+# wiphy_suspend 走 WoW 块（保连接 + wow enable + MHI M3），mac80211 不停机 ⇒
+# resume 不再走 ieee80211_reconfig/drv_start ⇒ 绕开 ath12k 暖固件的
+# WMI service-ready 死结。实测（2026-10-09 三发）：睡 61/46/120s、resume
+# devices 0.232-0.236s、关联与 DHCP 租约保持、零 deauth。depends += iw
+#（unit 需要 /usr/sbin/iw；此前 rootfs 无 iw，正是它挡住了前几轮的判读）。
 depends="
+	iw
 	linux-meizu-meizu20
 	postmarketos-base
 	postmarketos-usb-moded
@@ -172,6 +180,7 @@ makedepends="devicepkg-dev"
 	meizu-quiet.service
 	meizu-memsleep.service
 	meizu-wfi.service
+	meizu-wowlan.service
 	meizu-grow-rootfs.service
 	meizu-dsp-mount.service
 	meizu-dsp-mount.sh
@@ -229,7 +238,7 @@ package() {
 		"$pkgdir"/usr/lib/meizu20/meizu-bind-988000.sh
 	for u in qbootctl-meizu meizu-touch meizu-amps meizu-audio meizu-retimer \
 		meizu-pas meizu-noswr meizu-quiet meizu-memsleep meizu-wfi meizu-grow-rootfs \
-		meizu-dsp-mount devshell meizu-sndcard-bind meizu-audio-route; do
+		meizu-wowlan meizu-dsp-mount devshell meizu-sndcard-bind meizu-audio-route; do
 		install -Dm644 "$srcdir/$u.service" \
 			"$pkgdir"/usr/lib/systemd/system/$u.service
 	done
@@ -385,7 +394,7 @@ baf030d563372c7ea2872d76e9dbaaec1bc0807bbe758187e63c3b70b9cc1ecdfae67c9e0356d3ba
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-651c2982c4504413498e428a985881ff28ab6f7c3dab28ecddca62db4f56ee4a9071fa74debf17193f19d17ea81c54c2520c11563a74e8dba22a57afe6794f73  80-device-meizu-meizu20.preset
+f4a217245fdaf00a2a4eb3100960f3a29473b3ef9bbc3d92bcbe97aa0714ca8f2bb7387347007b918ae5bbf033ea1ee16e13d5db5afd147539c79eb61ed57c94  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -399,6 +408,7 @@ b004796bd49c7b73a1e51cbb75559e88f6e89ffc0c049331adc9836e82d38c6d7c26d5d76ac68ee2
 af0221ede8c923a5556a43e5ce95643e3a43abd84267ba61c48e39b88f1a1e6bc835fbfb29fb0cc1dfa15b207d37783965e974be4d97df7780b14d5c5ba7a5c0  meizu-quiet.service
 139861422e67dde7bcb13b430ff57017f8d731c48f349e2c668f20fac31043563682a2e67d6727bac283115239d2c0906178a7efa25b493361e7647b4487dc26  meizu-memsleep.service
 64d14d53c7f4f213bb3caab6053b57501ae59c10fe1104f697380b623410d4cff757352ab1a82a4c0ab19b7691cb57087ef7c62613cf8e0f338bb0f72aeb079e  meizu-wfi.service
+2f60fbb2791d0ff9f63352200f13d68d8706ee4516202879ecfc995a582655bac95b9dec5820c3702a4acc2cb684e3cb5eae020cf53f219d963568f04f05f050  meizu-wowlan.service
 b7db62b317a1fb0cf2010358ece27b9da5763a9f62e455c9582abb177aef5bf60025b437f8a7df3f7906d83bdb169803c6f8bd7e5beea570f44a295bf676d9fa  meizu-grow-rootfs.service
 d8e490072aa3f10e1493f0ea0ea0f7c260d6fd644c258151203a8153633068a048db7d1db8a14755155f98acafba5d9e7da298f05528aa4a26e30ebfe4930b91  meizu-dsp-mount.service
 efdd3a0dce1a80d6b58a2d3d023ed810b4c81dada573f8a642f18a08c2772df55cc459d0b84f96b7efde062733a5e3376b12616125eb825b6db64916143e0241  meizu-dsp-mount.sh

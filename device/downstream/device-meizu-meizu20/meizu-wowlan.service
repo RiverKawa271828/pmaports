@@ -1,0 +1,29 @@
+[Unit]
+Description=Enable WoWLAN (WiFi stays connected across s2idle suspend)
+Documentation=https://github.com/RiverKawa271828/nura-meizu-m2381
+# r55: with a wowlan config set, cfg80211's wiphy_suspend takes the WoW path
+# (ath12k_wow_op_suspend: keep connection + wow enable + MHI M3) instead of
+# unconditionally deauthenticating and stopping mac80211. mac80211 never
+# stops, so resume skips ieee80211_reconfig entirely: no drv_start, no
+# ath12k core re-init, no 5s WMI service-ready wait. That is what makes
+# sleep actually survivable for ath12k on this board (measured 2026-10-09:
+# 61s/120s s2idle, "PM: resume devices took 0.232s", association + DHCP
+# lease kept, zero deauth, three sleeps clean).
+# Trigger = magic-packet only: we want the WoW block, not spurious screen
+# wakes - "disconnect" would resume the device on any AP-side deauth.
+# Limitation: ath12k firmware-crash recovery re-registers the wiphy and
+# loses the wowlan config until this unit runs again (reboot it is).
+After=sys-subsystem-net-devices-wlan0.device
+Wants=sys-subsystem-net-devices-wlan0.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# wowlan is a phy-level command: `iw dev wlan0 wowlan ...` is rejected by iw
+# (usage dump, unit fails - seen on the r55 install). Single wiphy on this
+# board, so phy0 is deterministic; the netdev dependency above only guards
+# ordering (phy exists once wlan0 does).
+ExecStart=/usr/sbin/iw phy phy0 wowlan enable magic-packet
+
+[Install]
+WantedBy=multi-user.target
