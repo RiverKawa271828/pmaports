@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=53
+pkgrel=54
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -175,7 +175,6 @@ makedepends="devicepkg-dev"
 	meizu-grow-rootfs.service
 	meizu-dsp-mount.service
 	meizu-dsp-mount.sh
-	meizu-sleepmask.conf
 	devshell.service
 	MEIZU20.conf
 	HiFi.conf
@@ -235,12 +234,12 @@ package() {
 			"$pkgdir"/usr/lib/systemd/system/$u.service
 	done
 	# r13: active-slot dsp partition mounted ro at /mnt/dsp (audiopd file
-	# service root); sleep-target masking as a tmpfiles rule (structural
-	# across reinstalls, hand unmask wins).
+	# service root).
 	install -Dm755 "$srcdir/meizu-dsp-mount.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-dsp-mount.sh
-	install -Dm644 "$srcdir/meizu-sleepmask.conf" \
-		"$pkgdir"/usr/lib/tmpfiles.d/meizu-sleepmask.conf
+	# r54: sleep-target masking (tmpfiles rule) REMOVED —— 睡眠死因已于内核侧
+	# 修好（in-tree printk 的 console_suspend_all 回归 ⇒ cmdline no_console_suspend，
+	# 见 nura AGENTS「suspend 已结案」）。新装镜像 = 睡眠可用、自动睡眠按桌面默认开。
 	install -Dm644 "$srcdir/80-device-meizu-meizu20.preset" \
 		"$pkgdir"/usr/lib/systemd/system-preset/80-device-meizu-meizu20.preset
 	# r9: udev trigger for the ADSP root-PD daemon session (the unit itself
@@ -403,7 +402,6 @@ af0221ede8c923a5556a43e5ce95643e3a43abd84267ba61c48e39b88f1a1e6bc835fbfb29fb0cc1
 b7db62b317a1fb0cf2010358ece27b9da5763a9f62e455c9582abb177aef5bf60025b437f8a7df3f7906d83bdb169803c6f8bd7e5beea570f44a295bf676d9fa  meizu-grow-rootfs.service
 d8e490072aa3f10e1493f0ea0ea0f7c260d6fd644c258151203a8153633068a048db7d1db8a14755155f98acafba5d9e7da298f05528aa4a26e30ebfe4930b91  meizu-dsp-mount.service
 efdd3a0dce1a80d6b58a2d3d023ed810b4c81dada573f8a642f18a08c2772df55cc459d0b84f96b7efde062733a5e3376b12616125eb825b6db64916143e0241  meizu-dsp-mount.sh
-9406153210b8eff1f89690ffb561db9ab83a5261c329907811276eed91fb892bd5443854285932ff4b5b59ef014f3f8b29c2ba4a833b3def69d71f7a91ade196  meizu-sleepmask.conf
 1b110900f88d609d8e555102c653bb21948149db6c9d07547b8d5e4de1f4ece4204ae5c85a027f6654a9b72ccddbc5668183c7845cb95c7dd74030397788dfc7  devshell.service
 23425b29f58ff9dec964d38621ba9151d428e1d6ed581505e46a5049e938eda8efc465d49db7eb60017ace7de4f8a48ef5e662acd672f77bbc77d17b11056922  MEIZU20.conf
 c9854145566ef709850d1c9c92282a727ed44ce2ff9b1d35f734653d40d681c281e91302a6fbe6b03b9e973b72c5c5767ee303e9ac2ff8641b7ee1e9dfdb1a7f  HiFi.conf
