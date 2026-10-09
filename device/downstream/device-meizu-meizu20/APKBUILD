@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=58
+pkgrel=59
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -138,11 +138,19 @@ options="!check !archcheck"
 #（Release r66 rootfs 上机实锤，2026-10-07）。
 # r55 (2026-10-09, WoWLAN 轮): meizu-wowlan.service 新增 —— 开机
 # `iw dev wlan0 wowlan enable magic-packet`。有 wowlan 配置后 cfg80211 的
-# wiphy_suspend 走 WoW 块（保连接 + wow enable + MHI M3），mac80211 不停机 ⇒
+# wiphy_suspend 走 WoW 块（保连接 + wow enable + M3），mac80211 不停机 ⇒
 # resume 不再走 ieee80211_reconfig/drv_start ⇒ 绕开 ath12k 暖固件的
 # WMI service-ready 死结。实测（2026-10-09 三发）：睡 61/46/120s、resume
 # devices 0.232-0.236s、关联与 DHCP 租约保持、零 deauth。depends += iw
 #（unit 需要 /usr/sbin/iw；此前 rootfs 无 iw，正是它挡住了前几轮的判读）。
+# r59 (2026-10-10, uinput 轮，steamos 线带话主诉求): Steam Input 虚拟手柄
+# （Proton 系游戏必经）打不开 /dev/uinput = 游戏侧输入全死。配套内核
+# r78 补 CONFIG_INPUT_UINPUT=m；本包两件用户态胶水：
+# ① 60-meizu20-uinput.rules —— uaccess 给活动会话用户 rw（默认
+#    root:root 0600，Steam 非特权跑）+ static_node 预造节点（uinput 带
+#    MODULE_ALIAS("devname:uinput")，非 cargo cult）；
+# ② meizu20-uinput.conf → modules-load.d —— misc 设备无 open 时自动
+#    加载，不开机加载则节点是死的。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -163,6 +171,8 @@ makedepends="devicepkg-dev"
 	source="
 	deviceinfo
 	modprobe.conf
+	60-meizu20-uinput.rules
+	meizu20-uinput.conf
 	70-meizu20-vibra.rules
 	qbootctl-meizu.service
 	71-meizu20-fastrpc-rootpd.rules
@@ -225,6 +235,14 @@ package() {
 	devicepkg_package $startdir $pkgname
 	install -Dm644 "$srcdir/modprobe.conf" \
 		"$pkgdir"/etc/modprobe.d/50-meizu20-blacklist.conf
+	# r59: uinput for Steam Input virtual gamepads (see r59 note above).
+	# Rule numbering: 60 < systemd 70-uaccess.rules - the TAG must be set
+	# before systemd's rule consumes it. modules-load.d gives the module a
+	# boot-time load (misc has no open-autoload).
+	install -Dm644 "$srcdir/60-meizu20-uinput.rules" \
+		"$pkgdir"/usr/lib/udev/rules.d/60-meizu20-uinput.rules
+	install -Dm644 "$srcdir/meizu20-uinput.conf" \
+		"$pkgdir"/usr/lib/modules-load.d/meizu20-uinput.conf
 	install -Dm755 "$srcdir/meizu-touch-load.sh" \
 		"$pkgdir"/usr/lib/meizu20/meizu-touch-load.sh
 	# r8: i2c10/888000 amp bind (CS35L45 x2), meizu-amps.service.
@@ -413,6 +431,8 @@ package() {
 sha512sums="
 baf030d563372c7ea2872d76e9dbaaec1bc0807bbe758187e63c3b70b9cc1ecdfae67c9e0356d3ba4656ab7ea2a95eb7825c5c6cfbe04681913f1e847f38a412  deviceinfo
 96d1f86ff0f64f31a6da123eeff1944e287ce578c29a3a9cae77e00cabb2ed633bb6c433abb728ebcd3030e3b74ab7357ae090af8f8fa5c2c6f7fd0c6868bfa6  modprobe.conf
+aa684e2cb113d7abe78b45935d52b9bf38b0660198ae43be3ad4d7176f4ad7eaa9ad974a574bb2afa99a34560774cf1646d38ac08242cca00a6ee0612dfd5304  60-meizu20-uinput.rules
+42b5f5cbafdacd3cf698f015b0e9f96a3315d490accc11e092cdc88f44071ec024e4dee9b7a804d133cc3cf0c158bb5866edcf1a6ec49e7ff01537839c7e80a2  meizu20-uinput.conf
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules

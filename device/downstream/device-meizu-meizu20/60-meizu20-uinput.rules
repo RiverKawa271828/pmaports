@@ -1,0 +1,9 @@
+# Meizu 20 (device pkg r59): Steam Input virtual gamepads (Proton titles
+# especially) inject via /dev/uinput - kernel r78 ships it as
+# CONFIG_INPUT_UINPUT=m. Default node is root:root 0600 and Steam runs as
+# the session user: tag for logind uaccess (same pattern as the i2c-dev
+# rule, active-seat user gets rw via ACL). static_node is real here -
+# uinput carries MODULE_ALIAS("devname:uinput"), so the node is
+# pre-created at boot before the module ever loads (kernel-side alias
+# checked in the fork tree, drivers/input/misc/uinput.c).
+KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
