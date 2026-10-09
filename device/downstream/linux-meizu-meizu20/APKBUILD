@@ -24,7 +24,7 @@ maintainer="ri <ri@example.com>"
 _flavor="meizu-meizu20"
 pkgname=linux-$_flavor
 pkgver=7.3.0_rc6
-pkgrel=77
+pkgrel=78
 pkgdesc="Mainline kernel for Meizu 20 (SM8550)"
 arch="aarch64"
 _carch="arm64"
@@ -122,5 +122,5 @@ package() {
 
 sha512sums="
 2a529c901f335cc0a2483004ea0339b16555b555efb743cec85f788ebd39c8c38542f4edfca95df2fe9504dc8e71777bd8f5e129d953c5ce56bd5c2c220dae9a  linux-meizu-meizu20-fork-v7.3.0_rc6.tar.gz
-929c8901236dd05b27c2d61b77b7835926eb479d3f4ac5188f09fe4dfe5c882848cd7818aa024cbe98308daf93b641d8e88a7b63400b21510ddb9ce4fc984b16  config-meizu-meizu20.aarch64
+3d1a0666d34059346b44970f7117d05ef10a57023218eb35bda8d3cfac75ee3cd4f3485d13b100556b2a5733564912f0c3a8e2f43697e176e6d3c4e06d77a91d  config-meizu-meizu20.aarch64
 "
