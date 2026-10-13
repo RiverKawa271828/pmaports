@@ -1,0 +1,27 @@
+#!/usr/sbin/nft -f
+
+# waydroid NAT container on waydroid0 (192.168.240.0/24):
+# pmOS inet filter input/forward policy drop blocks DHCP/DNS/forward for
+# the vnic unless accepted here. Pair with masquerade in table ip lxc
+# (recreated by waydroid-net.sh at container start). 2026-10-13 fix.
+table inet filter {
+	chain input {
+		iifname "waydroid0" udp dport { 53, 67 } accept comment "waydroid DNS+DHCP from container"
+		iifname "waydroid0" tcp dport 53 accept comment "waydroid DNS over TCP"
+	}
+
+	chain forward {
+		iifname "waydroid0" accept comment "Accept forwarding from waydroid0"
+		oifname "waydroid0" accept comment "Accept forwarding to waydroid0"
+	}
+}
+# MSS clamp for container TCP (2026-10-13): upstream path MTU < 1500
+# (PPPoE-class) and ICMP frag-needed does not survive the NAT path, so
+# unclamped container TCP blackholes on large transfers (text OK, images
+# stall). Self-owned table = no dependency on ip lxc table lifetime.
+table ip waydroid_mss {
+	chain postrouting {
+		type filter hook postrouting priority mangle; policy accept;
+		tcp flags syn ip saddr 192.168.240.0/24 oifname != "waydroid0" counter tcp option maxseg size set 1400 comment "waydroid MSS clamp"
+	}
+}

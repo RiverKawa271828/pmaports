@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=60
+pkgrel=61
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -151,6 +151,14 @@ options="!check !archcheck"
 #    MODULE_ALIAS("devname:uinput")，非 cargo cult）；
 # ② meizu20-uinput.conf → modules-load.d —— misc 设备无 open 时自动
 #    加载，不开机加载则节点是死的。
+# r61 (2026-10-14, 用户拍板「以后构建带上 waydroid 和其修复」): the five
+# waydroid packages bake into every image (previously installed online on
+# the device per-UI, lost on every userdata reflash - the 2026-10-14
+# plasma reflash round). The 52_waydroid.nft network fix rides along in
+# this package; the container images themselves are NOT shipped - waydroid
+# init auto-pulls waydroid_arm64_only online, or restore offline from the
+# harvest archive (nura runbook). Container unit stays on-demand (preset
+# below), matching the 2026-10-14 toy-round posture.
 depends="
 	iw
 	linux-meizu-meizu20
@@ -166,6 +174,11 @@ depends="
 	hexagonrpcd
 	hexagonrpcd-systemd
 	hexagonrpcd-udev
+	waydroid
+	waydroid-pyc
+	waydroid-systemd
+	gbinder-python
+	libgbinder
 "
 makedepends="devicepkg-dev"
 	source="
@@ -225,6 +238,7 @@ makedepends="devicepkg-dev"
 	smartcard-auth
 	postlogin
 	meizu20-pulseaudio-no-x11.conf
+	52_waydroid.nft
 "
 
 build() {
@@ -426,6 +440,13 @@ package() {
 		"$pkgdir"/etc/pam.d/smartcard-auth
 	install -Dm644 "$srcdir/postlogin" \
 		"$pkgdir"/etc/pam.d/postlogin
+	# r61: waydroid container network fix, baked (see depends comment).
+	# inet filter waydroid0 pass rules + self-owned waydroid_mss MSS-clamp
+	# table (upstream path MTU < 1500, ICMP frag-needed lost in NAT).
+	# Purely additive snippet - never `nft -f` the main file on a live
+	# system (flush ruleset kills the lxc tables; restart nftables ditto).
+	install -Dm644 "$srcdir/52_waydroid.nft" \
+		"$pkgdir"/etc/nftables.d/52_waydroid.nft
 }
 
 sha512sums="
@@ -436,7 +457,7 @@ aa684e2cb113d7abe78b45935d52b9bf38b0660198ae43be3ad4d7176f4ad7eaa9ad974a574bb2af
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-f4a217245fdaf00a2a4eb3100960f3a29473b3ef9bbc3d92bcbe97aa0714ca8f2bb7387347007b918ae5bbf033ea1ee16e13d5db5afd147539c79eb61ed57c94  80-device-meizu-meizu20.preset
+b98aaca128bd2c59899d4c08b7ebdd3afb2f187b474aa8717ef5496b4832c4fac0e969af11c40fa4f63d6b362a36bd34df00a6b242ff501f09d1170b9ad1c12c  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -485,4 +506,5 @@ d3ddf06d51b7220a28ad2f4722ab5cd5b8e589c3570574ad5ba81c3b825d74b7c768c5831a927ad2
 8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  smartcard-auth
 8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  postlogin
 b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080ccda48d6d6aacf83f503a104299283afb4cde306a8e17c9ee  meizu20-pulseaudio-no-x11.conf
+7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
 "

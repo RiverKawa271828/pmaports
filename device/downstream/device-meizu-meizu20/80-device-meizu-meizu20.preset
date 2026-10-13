@@ -41,3 +41,9 @@ enable meizu-sndcard-bind.service
 # operating point every boot (FE MultiMedia1 -> SEC_MI2S -> CS35L45 x2,
 # safe volumes, amps on). Pure userspace; opens no PCM device.
 enable meizu-audio-route.service
+# r61 (2026-10-14): waydroid now baked into the image (waydroid* depends).
+# Container stays on-demand - waydroid-systemd enables it by default,
+# which means a headless Android booting at power-on (and its boot-time
+# freeze breaks netd route install). Opening waydroid from the session
+# starts the container; keep the boot clean.
+disable waydroid-container.service
