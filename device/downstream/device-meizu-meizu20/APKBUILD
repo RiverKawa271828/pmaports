@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=61
+pkgrel=62
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -159,6 +159,15 @@ options="!check !archcheck"
 # init auto-pulls waydroid_arm64_only online, or restore offline from the
 # harvest archive (nura runbook). Container unit stays on-demand (preset
 # below), matching the 2026-10-14 toy-round posture.
+# r62 (2026-10-14, 用户拍板两连): (a) drop discover-backend-apk - the KDE
+# Discover store (plus its flatpak/fwupd backends) is a plasma-mobile
+# companion, not a phosh one; it only entered via this depends line. Removal
+# here keeps it out of fresh rootfs images; on already-provisioned devices
+# `apk del discover-backend-apk discover` cleans it up (fwupd / flatpak-libs
+# stay anyway: gnome-software / malcontent depend on them). (b) add flatpak
+# + gnome-software-plugin-flatpak - the phosh store (gnome-software, from
+# the UI metapackage) never had its flatpak plugin; this gives it real
+# flatpak store support (flathub) without dragging Discover back in.
 depends="
 	iw
 	linux-meizu-meizu20
@@ -170,7 +179,8 @@ depends="
 	systemd
 	firmware-meizu-meizu20
 	e2fsprogs-extra
-	discover-backend-apk
+	flatpak
+	gnome-software-plugin-flatpak
 	hexagonrpcd
 	hexagonrpcd-systemd
 	hexagonrpcd-udev
