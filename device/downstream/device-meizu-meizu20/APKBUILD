@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=62
+pkgrel=63
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -184,6 +184,7 @@ depends="
 	hexagonrpcd
 	hexagonrpcd-systemd
 	hexagonrpcd-udev
+	iio-sensor-proxy
 	waydroid
 	waydroid-pyc
 	waydroid-systemd
