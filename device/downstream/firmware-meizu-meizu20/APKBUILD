@@ -37,10 +37,21 @@
 # NOT shipped: never verified on this device - revisit with the SPF
 # audio front, don't grow the known-good baseline blind.
 # regulatory.db comes from wireless-regdb (base image already has it).
+# r4 (2026-11-07 cellular reactivation prep): + qcom/sm8550/meizu/modem_pr/
+# (158 files, 8.7M) = modem_a FAT16 harvest modem/image/modem_pr (Stock Day
+# vendor-fw-harvest tree) = mcfg/configs/{mcfg_hw,mcfg_sw} + so/*.mbn built-in
+# default RF calibration. Served to the modem by tqftpserv over qrtr-TFTP at
+# absolute paths /readonly/firmware/image/* -> device needs symlink
+# /readonly/firmware/image -> /lib/firmware/qcom/sm8550/meizu/modem_pr
+# (+ /readwrite on tmpfs). Recipe ground truth = m2468-mainline repo (same
+# SoC) pitfalls #31/#33: without this root the modem cannot fetch mcfg/RF
+# card files and RF bring-up stalls (our S3 'DMS online DeviceNotReady'
+# head suspect). Privacy: board/operator configs only; per-unit calibration
+# lives in QCN/EFS (never shipped); IMEI grep clean over the added tree.
 maintainer="ri <ri@example.com>"
 pkgname=firmware-meizu-meizu20
 pkgver=1
-pkgrel=3
+pkgrel=4
 pkgdesc="Firmware for Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 url="https://postmarketos.org"
 arch="aarch64"
@@ -57,5 +68,5 @@ package() {
 }
 
 sha512sums="
-b0d26deb83f77eab8495d3dc02c1e031d078444eaf33b22fcaec4eceff38764aa518cf9d49c21060fc36f7d7397f1a9a43c4589ca0639c1b57b0f48133efe809  firmware-meizu-meizu20.tar.gz
+507b6119b3c3f66b7afe3c3de03696daec567df56c487f7300abdea02b4847e43b2f53eb479e6054a50401fa76acae8febd4e339c6fce8f5e047502330f1ebbd  firmware-meizu-meizu20.tar.gz
 "
