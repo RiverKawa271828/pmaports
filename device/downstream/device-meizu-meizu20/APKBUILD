@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=63
+pkgrel=64
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -168,6 +168,34 @@ options="!check !archcheck"
 # + gnome-software-plugin-flatpak - the phosh store (gnome-software, from
 # the UI metapackage) never had its flatpak plugin; this gives it real
 # flatpak store support (flathub) without dragging Discover back in.
+# r64 (2026-11-19, 蜂窝四件设备包化轮 = tools/cellular 收编入库): 插卡即用
+# 全自动链 + 双卡切换的手工件从 /root、/usr/libexec、/usr/local/bin、/etc
+# 手工摆位收进本包（防重刷丢失；11-19 一百零四/一百零五 轮产物，九件原字节
+# 仓↔机 sha256 对拍后在册）。路径统一进包惯例，单元/脚本内引用同步适配：
+# ① cell-keeper.sh -> /usr/lib/meizu20/ + cell-keeper.service（45s 注册面
+#    自愈守卫：session 丢失自动 re-provision+舞步、DMS offline 死锁->舞步、
+#    boot slot2 归位 power-off；真实战场首救实证 75s 自动回 registered）；
+# ② d1_dataup.sh + d1_bindmux.py -> /usr/lib/meizu20/ + cell-dataup.service
+#    （boot 数据面 oneshot：DPM open -> WDS dial -> rmnet0(QMAP mux 1) ->
+#    bounce+ping 收敛环；包化唯一实质差异 = bindmux 引用路径改包内）；
+# ③ meizu-pas-unseal.conf -> /usr/lib/systemd/system/meizu-pas.service.d/
+#    （解封自动化 drop-in：封印序列原样复刻尾接清 override+bind mpss+start。
+#    ⚠勿另立 unit 挂 meizu-pas 依赖——其 After=multi-user 自环拖死
+#    ordering cycle，systemd 会砍新件[一百零四坑册]）；
+# ④ cell-switch.sh -> /usr/bin/（双卡切换 <1|2>，单 active 槽形态；MM
+#    qcom-soc 双 active hot-swap 误判 = upstream 级 bug，真 DSDS 挂候补）。
+# 伴生件两枚：rmtfs.service.d/10-unlimited-retry.conf（StartLimitIntervalSec=0
+# 无限重试；rmtfs apk 腿未装时 drop-in inert 无害）+ NetworkManager conf.d
+# 00-nura-qrtr-unmanaged.conf（NM unmanaged qrtr0/rmnet_ipa0/rmnet0——NM
+# auto-enable = MM 双 active 漂移循环加速器[一百零四实锤]，结构性隔离）。
+# depends += qmi-utils（qmicli 三脚本直接调用）+ python3（d1_bindmux.py 直接
+# 调用；此前经 gbinder-python 传递自足，显式化防未来挤出）。
+# ⚠链腿 apk（rmtfs 三件/msm-modem-uim-selection 两件/postmarketos-base-ui-
+# modemmanager/soc-qcom-modem-systemd/tqftpserv/qrtr）仍为手工腿未进 depends
+# ——新 rootfs 上包件 idle 安全（keeper qmi_alive 12s 超时静默跳过 / dataup
+# ExecStartPre 120s 超时兜底 exit 0），全链自动待腿包化拍板（用户门）。
+# 升级安全：preset 只作用新装机；现网 /etc 手工件同内容，/usr/lib 包件加入
+# 零行为变化。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -190,6 +218,8 @@ depends="
 	waydroid-systemd
 	gbinder-python
 	libgbinder
+	qmi-utils
+	python3
 "
 makedepends="devicepkg-dev"
 	source="
@@ -250,6 +280,15 @@ makedepends="devicepkg-dev"
 	postlogin
 	meizu20-pulseaudio-no-x11.conf
 	52_waydroid.nft
+	cell-keeper.sh
+	cell-switch.sh
+	d1_dataup.sh
+	d1_bindmux.py
+	cell-keeper.service
+	cell-dataup.service
+	meizu-pas-unseal.conf
+	10-unlimited-retry.conf
+	00-nura-qrtr-unmanaged.conf
 "
 
 build() {
@@ -458,6 +497,26 @@ package() {
 	# system (flush ruleset kills the lxc tables; restart nftables ditto).
 	install -Dm644 "$srcdir/52_waydroid.nft" \
 		"$pkgdir"/etc/nftables.d/52_waydroid.nft
+	# r64: cellular automation four + two companions (see r64 note above).
+	install -Dm755 "$srcdir/cell-keeper.sh" \
+		"$pkgdir"/usr/lib/meizu20/cell-keeper.sh
+	install -Dm755 "$srcdir/d1_dataup.sh" \
+		"$pkgdir"/usr/lib/meizu20/d1_dataup.sh
+	install -Dm755 "$srcdir/d1_bindmux.py" \
+		"$pkgdir"/usr/lib/meizu20/d1_bindmux.py
+	install -Dm755 "$srcdir/cell-switch.sh" \
+		"$pkgdir"/usr/bin/cell-switch.sh
+	for u in cell-keeper cell-dataup; do
+		install -Dm644 "$srcdir/$u.service" \
+			"$pkgdir"/usr/lib/systemd/system/$u.service
+	done
+	install -Dm644 "$srcdir/meizu-pas-unseal.conf" \
+		"$pkgdir"/usr/lib/systemd/system/meizu-pas.service.d/meizu-pas-unseal.conf
+	# inert until the rmtfs apk leg lands (drop-in for an absent unit = no-op)
+	install -Dm644 "$srcdir/10-unlimited-retry.conf" \
+		"$pkgdir"/usr/lib/systemd/system/rmtfs.service.d/10-unlimited-retry.conf
+	install -Dm644 "$srcdir/00-nura-qrtr-unmanaged.conf" \
+		"$pkgdir"/usr/lib/NetworkManager/conf.d/00-nura-qrtr-unmanaged.conf
 }
 
 sha512sums="
@@ -468,7 +527,7 @@ aa684e2cb113d7abe78b45935d52b9bf38b0660198ae43be3ad4d7176f4ad7eaa9ad974a574bb2af
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-b98aaca128bd2c59899d4c08b7ebdd3afb2f187b474aa8717ef5496b4832c4fac0e969af11c40fa4f63d6b362a36bd34df00a6b242ff501f09d1170b9ad1c12c  80-device-meizu-meizu20.preset
+ae575719a314df31d2db1f1ad48b9291d90f41643d14940c5b4917cd289fef85cb8caae4eae30db8d971152db8e0febd6c06f9e74dc0d9674d254addf01ed523  80-device-meizu-meizu20.preset
 3ba30f85fc236c1148c342923fc5b64cdc66a20e93888f6af2775e7cd3de3fb314486c5928e2a2f54a792e7e6c8e910d99eb50ff1df5038f73cbc206797a8678  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -518,4 +577,13 @@ d3ddf06d51b7220a28ad2f4722ab5cd5b8e589c3570574ad5ba81c3b825d74b7c768c5831a927ad2
 8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  postlogin
 b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080ccda48d6d6aacf83f503a104299283afb4cde306a8e17c9ee  meizu20-pulseaudio-no-x11.conf
 7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
+fbefe4e7a3e22dc7f1d999829cd29af746f562fe34bbb54ec90f0f448e74e4c22abbef4a5c2f5de79445b47730da58fceeb4b2c27bba4c4fffdc32cc2e41979e  cell-keeper.sh
+3d09534365f8a5757ad589b935497f783e86b41b9fe96a95867019036f37b798b30301cd7c1c2f0e9bc9dbd55282539cb499a172d724d9bd9aff64938cffdebb  cell-switch.sh
+2f834f558d54ffaa398bbfd59cc73c7c967bed9ee0663b30a20c85f3409be803b972e11b57bf72a76f31ca2adaa2df37c055a8edbefffeb51d4276c45582ce79  d1_dataup.sh
+f3b0988ec1749f387a1141d6615b0ca570262435506e09f006e5d3aae70130731221083db05e9cccdb2b15c45c04c9d6f9e1c66ad3ef33522f2c6f0f4e615713  d1_bindmux.py
+ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
+f91d5a87d182b3847535284fe5f44b9b209e61dc4725115d9cbb189d941f0f33f541a72ba85d6c39f9f8ca4af353f8c33106725a7118125cd13f490d3262acd2  cell-dataup.service
+134a8fb8221dfb6a3888ce0e5e3fb3cebfac420ff5e3ddcc6b339297ade3faad4dc51ec5a68401ee46974e153a63f35007d4d827dede09baebe1d62ca3b9c6a0  meizu-pas-unseal.conf
+d2d7ab5a091bb2bac791497d462e6a9ea01f5a335c37becf77a50849c4d20885e7cfda86544a2047d6a995370c0e496ec8188dfcd73f6913068a3159ff557de1  10-unlimited-retry.conf
+e25e3899c7964c428409e914875fcb731cd7fbfc8a37e787b8b5d37b971753b052ae282d50e0a8c3b22e90b1b0fe43eef6715b3b5774f222f1f4e368151ddf0d  00-nura-qrtr-unmanaged.conf
 "

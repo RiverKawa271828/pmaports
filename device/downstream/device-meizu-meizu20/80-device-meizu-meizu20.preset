@@ -47,3 +47,9 @@ enable meizu-audio-route.service
 # freeze breaks netd route install). Opening waydroid from the session
 # starts the container; keep the boot clean.
 disable waydroid-container.service
+# r64 (2026-11-19): cellular automation (plug-in-SIM-works chain, tools/
+# cellular packaging round). keeper = registration self-heal guard;
+# dataup = boot data-plane oneshot. Preset affects fresh installs only -
+# the live device's hand-laid enable state survives apk upgrades.
+enable cell-keeper.service
+enable cell-dataup.service
