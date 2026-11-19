@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=65
+pkgrel=67
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -208,6 +208,14 @@ options="!check !archcheck"
 # 行为面：新装机 = MM enabled（腿）+ keeper/dataup preset enable（r64）= 插卡即用
 # 全自动；无 SIM 装机 idle 安全（keeper qmi_alive 超时静默跳过 / dataup 超时兜底，
 # r64 已验）；现网升级零变化（腿已装，apk add 幂等）。
+# r67 (2026-11-20, 一百零九事故修复): 摘 msm-modem-uim-selection 两件——照官方
+# 单卡形态（FP5/FP6 depends 实测 = soc-qcom-modem 腿零 uim-selection；单卡设备
+# 无 slot 选择需求）。事故链 = 官方 oneshot 形态（RequiredBy=MM+multi-user）+
+# r66 的无限重试 drop-in：modem 慢启（QMI 最长 4min 实测）时 oneshot 永不完成 →
+# multi-user.target 永久 waiting → 触控/audio/pas/devshell/MM/remoteproc 全服务
+# 面卡死（boot-3/4 实录，list-jobs 铁证）。slot 管理职责 = cell-keeper 全覆盖
+# （状态文件归位 r66 + 双 active 守卫 r66 + 丢失重建 r66）；真双卡 = upstream
+# 候补（106 轮钉）。机上 = apk del 两件（requires/wants 链接随包消失零残影）。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -236,8 +244,6 @@ depends="
 	rmtfs
 	rmtfs-systemd
 	rmtfs-udev
-	msm-modem-uim-selection
-	msm-modem-uim-selection-systemd
 	modemmanager
 	modemmanager-systemd
 	modemmanager-udev
@@ -542,6 +548,11 @@ package() {
 		"$pkgdir"/usr/lib/systemd/system/rmtfs.service.d/10-unlimited-retry.conf
 	install -Dm644 "$srcdir/00-nura-qrtr-unmanaged.conf" \
 		"$pkgdir"/usr/lib/NetworkManager/conf.d/00-nura-qrtr-unmanaged.conf
+	# r66: 掩蔽上游 hexagonrpcd-adsp-sensorspd（与本机 udev 触发的 meizu-sensorspd
+	# 抢 ADSP 默认监听器位 → 本机必败重启环 = "ssc sensor session 很难起来"本体；
+	# 正主 = meizu-sensorspd[10-03 完整配方 -s -R]，udev 72 号规则触发）
+	mkdir -p "$pkgdir"/etc/systemd/system
+	ln -sf /dev/null "$pkgdir"/etc/systemd/system/hexagonrpcd-adsp-sensorspd.service
 }
 
 sha512sums="
@@ -602,8 +613,8 @@ d3ddf06d51b7220a28ad2f4722ab5cd5b8e589c3570574ad5ba81c3b825d74b7c768c5831a927ad2
 8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  postlogin
 b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080ccda48d6d6aacf83f503a104299283afb4cde306a8e17c9ee  meizu20-pulseaudio-no-x11.conf
 7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
-fbefe4e7a3e22dc7f1d999829cd29af746f562fe34bbb54ec90f0f448e74e4c22abbef4a5c2f5de79445b47730da58fceeb4b2c27bba4c4fffdc32cc2e41979e  cell-keeper.sh
-3d09534365f8a5757ad589b935497f783e86b41b9fe96a95867019036f37b798b30301cd7c1c2f0e9bc9dbd55282539cb499a172d724d9bd9aff64938cffdebb  cell-switch.sh
+0326cba98bded4408f7ad3c83da33c44b92b148de8d2a376e243b50b6c69cb7ea014a98b2789be3d0cf15dec840acb8943a0f8cbcbd41e7ef45a4ef7e5be93d4  cell-keeper.sh
+0a48323405f91315ac461b913fe5883c5e50b7b0db6eb2a25c05c53ded1ded7561d3e37c0546a311454c72eef20dd7adcfcc99c9a113ed6f31b160c02d89fbef  cell-switch.sh
 2f834f558d54ffaa398bbfd59cc73c7c967bed9ee0663b30a20c85f3409be803b972e11b57bf72a76f31ca2adaa2df37c055a8edbefffeb51d4276c45582ce79  d1_dataup.sh
 f3b0988ec1749f387a1141d6615b0ca570262435506e09f006e5d3aae70130731221083db05e9cccdb2b15c45c04c9d6f9e1c66ad3ef33522f2c6f0f4e615713  d1_bindmux.py
 ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
