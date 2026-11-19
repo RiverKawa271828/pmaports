@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=67
+pkgrel=68
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -178,7 +178,6 @@ options="!check !archcheck"
 # ② d1_dataup.sh + d1_bindmux.py -> /usr/lib/meizu20/ + cell-dataup.service
 #    （boot 数据面 oneshot：DPM open -> WDS dial -> rmnet0(QMAP mux 1) ->
 #    bounce+ping 收敛环；包化唯一实质差异 = bindmux 引用路径改包内）；
-# ③ meizu-pas-unseal.conf -> /usr/lib/systemd/system/meizu-pas.service.d/
 #    （解封自动化 drop-in：封印序列原样复刻尾接清 override+bind mpss+start。
 #    ⚠勿另立 unit 挂 meizu-pas 依赖——其 After=multi-user 自环拖死
 #    ordering cycle，systemd 会砍新件[一百零四坑册]）；
@@ -317,7 +316,6 @@ makedepends="devicepkg-dev"
 	d1_bindmux.py
 	cell-keeper.service
 	cell-dataup.service
-	meizu-pas-unseal.conf
 	10-unlimited-retry.conf
 	00-nura-qrtr-unmanaged.conf
 "
@@ -541,8 +539,6 @@ package() {
 		install -Dm644 "$srcdir/$u.service" \
 			"$pkgdir"/usr/lib/systemd/system/$u.service
 	done
-	install -Dm644 "$srcdir/meizu-pas-unseal.conf" \
-		"$pkgdir"/usr/lib/systemd/system/meizu-pas.service.d/meizu-pas-unseal.conf
 	# inert until the rmtfs apk leg lands (drop-in for an absent unit = no-op)
 	install -Dm644 "$srcdir/10-unlimited-retry.conf" \
 		"$pkgdir"/usr/lib/systemd/system/rmtfs.service.d/10-unlimited-retry.conf
@@ -572,7 +568,7 @@ cecf7d3c2dd3eff32e4168d547eefc2e8dcc8cf89b4fd1317d55a88b75dac38c40024c800be9f81e
 b568645243ffcb1d42c2990a7ae44223172d02ea64cb296caaa07af96b94c1a04341df3f76f07961b2ffb8aeaf19edcf1482c3c0196c005a1346e25986502536  meizu-amps.service
 7d1cfcdc4c4b9735d42a88225bd8a2641179a29f26a4b94953ffacd64806caf5e0a25edac720cf3aa6e125aca25345b7b7fc59561d013b95211c85ec361d65ae  meizu-audio.service
 1f07fcc711d36b379ffd3c85c44011e0f48e97d9837e0af1a44a7472378f35dbe08f1b3bfe783bcf18a257dc76005be4e0124f12aed58a13c401d8b82edeff9d  meizu-retimer.service
-b004796bd49c7b73a1e51cbb75559e88f6e89ffc0c049331adc9836e82d38c6d7c26d5d76ac68ee2bd8028109fc576fd2ece92a285b8936e84ef11dbf1c8e47e  meizu-pas.service
+eb32547dcbfe99a5e05d43f9e5ffce25d0bed43ce19213cfc224068ba766a9a04135e0863079b27832e48bdb52c0d115dbb0802a721373e04ac59885b546a587  meizu-pas.service
 742ba2dd20f04133361adb1574f17eb7631ea3099e17e8ee2925001a675e0347c5c30a9e073343b1d38dffc367d23d809eb6ed2f091f2e5c61a45dd637c97774  meizu-noswr.service
 af0221ede8c923a5556a43e5ce95643e3a43abd84267ba61c48e39b88f1a1e6bc835fbfb29fb0cc1dfa15b207d37783965e974be4d97df7780b14d5c5ba7a5c0  meizu-quiet.service
 139861422e67dde7bcb13b430ff57017f8d731c48f349e2c668f20fac31043563682a2e67d6727bac283115239d2c0906178a7efa25b493361e7647b4487dc26  meizu-memsleep.service
@@ -613,13 +609,12 @@ d3ddf06d51b7220a28ad2f4722ab5cd5b8e589c3570574ad5ba81c3b825d74b7c768c5831a927ad2
 8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  postlogin
 b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080ccda48d6d6aacf83f503a104299283afb4cde306a8e17c9ee  meizu20-pulseaudio-no-x11.conf
 7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
-0326cba98bded4408f7ad3c83da33c44b92b148de8d2a376e243b50b6c69cb7ea014a98b2789be3d0cf15dec840acb8943a0f8cbcbd41e7ef45a4ef7e5be93d4  cell-keeper.sh
+ca04f01046b4c189ac7dc1e11c7e9076a92df94e7c12a7aad0dd70e8400de211a490d630aa48b6ee4d66adc5cf83f010210c9952d35e5cd19f69239bd8b49bc0  cell-keeper.sh
 0a48323405f91315ac461b913fe5883c5e50b7b0db6eb2a25c05c53ded1ded7561d3e37c0546a311454c72eef20dd7adcfcc99c9a113ed6f31b160c02d89fbef  cell-switch.sh
 2f834f558d54ffaa398bbfd59cc73c7c967bed9ee0663b30a20c85f3409be803b972e11b57bf72a76f31ca2adaa2df37c055a8edbefffeb51d4276c45582ce79  d1_dataup.sh
 f3b0988ec1749f387a1141d6615b0ca570262435506e09f006e5d3aae70130731221083db05e9cccdb2b15c45c04c9d6f9e1c66ad3ef33522f2c6f0f4e615713  d1_bindmux.py
 ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
-f91d5a87d182b3847535284fe5f44b9b209e61dc4725115d9cbb189d941f0f33f541a72ba85d6c39f9f8ca4af353f8c33106725a7118125cd13f490d3262acd2  cell-dataup.service
-134a8fb8221dfb6a3888ce0e5e3fb3cebfac420ff5e3ddcc6b339297ade3faad4dc51ec5a68401ee46974e153a63f35007d4d827dede09baebe1d62ca3b9c6a0  meizu-pas-unseal.conf
+716bf4c4cbf0cd621d508459578b2944a25897daccac5bca8e2e5047dbaf5ff4c3b09d37afa683a104fc3cfc05cd6edc96fc5a5be3e9e0d04ad3c723c2bf507a  cell-dataup.service
 d2d7ab5a091bb2bac791497d462e6a9ea01f5a335c37becf77a50849c4d20885e7cfda86544a2047d6a995370c0e496ec8188dfcd73f6913068a3159ff557de1  10-unlimited-retry.conf
 e25e3899c7964c428409e914875fcb731cd7fbfc8a37e787b8b5d37b971753b052ae282d50e0a8c3b22e90b1b0fe43eef6715b3b5774f222f1f4e368151ddf0d  00-nura-qrtr-unmanaged.conf
 "

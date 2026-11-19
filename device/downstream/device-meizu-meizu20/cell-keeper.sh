@@ -39,6 +39,21 @@ slot_active() { # slot_active <N> -> 0 = 该槽卡在位且 active
     | awk '/^  Physical slot /{cur=$3+0} cur=='"$1"' && /Card status: present/{p=1} cur=='"$1"' && /Slot status: active/{a=1} END{exit !(p && a)}'
 }
 
+# r68: 解封 mpss 后台化（蜂窝不阻塞 boot——meizu-pas 只管 ADSP/CDSP 且已摘
+# After=multi-user；remoteproc 按 name 找，防枚举序漂移）。⚠立即解封不等待：
+# r64/r67 实证形态 = 解封即刻 + rmtfs 无限重试兜底（modem EFS 服务出现时它必在
+# 重试）；等 rmtfs active 会死锁[rmtfs 等 modem EFS，modem 等本解封，一百零九
+# 当日即踩]。
+MPSS=""
+for r in /sys/class/remoteproc/remoteproc*/; do
+  [ "$(cat "$r/name" 2>/dev/null)" = modem ] && MPSS="$r"
+done
+if [ -n "$MPSS" ]; then
+  echo "" > /sys/bus/platform/devices/4080000.remoteproc/driver_override 2>/dev/null
+  echo 4080000.remoteproc > /sys/bus/platform/drivers/qcom_q6v5_pas/bind 2>/dev/null
+  echo start > "$MPSS/state" 2>/dev/null && log "mpss unsealed (async)"
+fi
+
 # boot 首步：非在役槽归位 power-off（运行态非持久，reboot 后双 active 会触发 MM
 # 双卡漂移循环；QMI 等待 60s→300s——一百零八~一零九 boot 实锤 modem 慢启[IPA fatal
 # 恢复窗]可达 4min+，60s 双轮静默跳过 = slot2 时代双 active 每现）

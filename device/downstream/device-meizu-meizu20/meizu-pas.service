@@ -1,6 +1,5 @@
 [Unit]
 Description=Meizu20: bring up ADSP+CDSP via PAS (modem/mpss must never bind)
-After=multi-user.target
 
 [Service]
 Type=oneshot
