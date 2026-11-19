@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=64
+pkgrel=65
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -193,9 +193,21 @@ options="!check !archcheck"
 # ⚠链腿 apk（rmtfs 三件/msm-modem-uim-selection 两件/postmarketos-base-ui-
 # modemmanager/soc-qcom-modem-systemd/tqftpserv/qrtr）仍为手工腿未进 depends
 # ——新 rootfs 上包件 idle 安全（keeper qmi_alive 12s 超时静默跳过 / dataup
-# ExecStartPre 120s 超时兜底 exit 0），全链自动待腿包化拍板（用户门）。
+# ExecStartPre 120s 超时兜底 exit 0），全链自动待腿包化拍板（用户门）（→ r65
+# 已收口，腿已进 depends）。
 # 升级安全：preset 只作用新装机；现网 /etc 手工件同内容，/usr/lib 包件加入
 # 零行为变化。
+# r65 (2026-11-19, 蜂窝链腿包化 = r64 报告遗留拍板项收口): 插卡即用链的 apk 腿
+# 全部烤进 depends——与在机手工腿逐名对拍后全量复制（pmOS 仓现货零自建），
+# 新 rootfs 开箱即全链自动：
+#   rmtfs 三件（rmtfs/-systemd/-udev；无限重试 drop-in r64 已随包）
+#   msm-modem-uim-selection 两件（-systemd 单元自带官方 enable 形态 RequiredBy=MM+multi-user）
+#   ModemManager 三件 + postmarketos-base-ui-modemmanager 两件（MM 开箱 enable 胶水）
+#   soc-qcom-modem-systemd + tqftpserv + qrtr（qrtr = qrtr-ns 名字服务守护；
+#   libqmi 只拉 qrtr-libs 不含守护，缺它 QMI 不通）
+# 行为面：新装机 = MM enabled（腿）+ keeper/dataup preset enable（r64）= 插卡即用
+# 全自动；无 SIM 装机 idle 安全（keeper qmi_alive 超时静默跳过 / dataup 超时兜底，
+# r64 已验）；现网升级零变化（腿已装，apk add 幂等）。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -220,6 +232,19 @@ depends="
 	libgbinder
 	qmi-utils
 	python3
+	qrtr
+	rmtfs
+	rmtfs-systemd
+	rmtfs-udev
+	msm-modem-uim-selection
+	msm-modem-uim-selection-systemd
+	modemmanager
+	modemmanager-systemd
+	modemmanager-udev
+	postmarketos-base-ui-modemmanager
+	postmarketos-base-ui-modemmanager-systemd
+	soc-qcom-modem-systemd
+	tqftpserv
 "
 makedepends="devicepkg-dev"
 	source="
