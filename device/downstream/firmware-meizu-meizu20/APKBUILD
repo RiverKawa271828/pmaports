@@ -42,8 +42,13 @@
 # vendor-fw-harvest tree) = mcfg/configs/{mcfg_hw,mcfg_sw} + so/*.mbn built-in
 # default RF calibration. Served to the modem by tqftpserv over qrtr-TFTP at
 # absolute paths /readonly/firmware/image/* -> device needs symlink
-# /readonly/firmware/image -> /lib/firmware/qcom/sm8550/meizu/modem_pr
-# (+ /readwrite on tmpfs). Recipe ground truth = m2468-mainline repo (same
+# /readonly/firmware/image -> /lib/firmware/qcom/sm8550/meizu  (NOTE: the
+#   MEIZU DIR, not modem_pr - modem requests carry a modem_pr/ component;
+#   2026-11-20 GNSS forensics round verified against live tqftpserv logs)
+# (+ /readwrite as a plain dir, tmpfs recommended). NOT yet provisioned by
+# any package (11-20 discovery: manual 11-19 symlink vanished mid-day, modem
+# ran on EFS-cached mcfg unbeknownst); candidate = device-package tmpfiles
+# (L symlink + d /readwrite). Recipe ground truth = m2468-mainline repo (same
 # SoC) pitfalls #31/#33: without this root the modem cannot fetch mcfg/RF
 # card files and RF bring-up stalls (our S3 'DMS online DeviceNotReady'
 # head suspect). Privacy: board/operator configs only; per-unit calibration
