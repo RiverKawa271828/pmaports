@@ -39,20 +39,15 @@ slot_active() { # slot_active <N> -> 0 = 该槽卡在位且 active
     | awk '/^  Physical slot /{cur=$3+0} cur=='"$1"' && /Card status: present/{p=1} cur=='"$1"' && /Slot status: active/{a=1} END{exit !(p && a)}'
 }
 
-# r68: 解封 mpss 后台化（蜂窝不阻塞 boot——meizu-pas 只管 ADSP/CDSP 且已摘
-# After=multi-user；remoteproc 按 name 找，防枚举序漂移）。⚠立即解封不等待：
-# r64/r67 实证形态 = 解封即刻 + rmtfs 无限重试兜底（modem EFS 服务出现时它必在
-# 重试）；等 rmtfs active 会死锁[rmtfs 等 modem EFS，modem 等本解封，一百零九
-# 当日即踩]。
-MPSS=""
+# r69/r101: modem start 延时化——内核期 autostart 撞 IPA init 握手死窗（modem
+# 侧 ~14s 无 A7 init 即断言 crash、AP 侧 -110 永不重试 → rmnet_ipa0 永不建，
+# 两 boot 实证；内核 pas 驱动 DT qcom,autostart-off 关 4080000 自启）。此处一条
+# start = 官方 autostart 语义的时序等价物（等系统稳定 ~30s = 103 实证好窗），
+# 无 blacklist/override/bind 链。rmtfs -s 已在位会等 rprocfd。
+sleep 30
 for r in /sys/class/remoteproc/remoteproc*/; do
-  [ "$(cat "$r/name" 2>/dev/null)" = modem ] && MPSS="$r"
+  [ "$(cat "$r/name" 2>/dev/null)" = modem ] && echo start > "$r/state" 2>/dev/null && log "mpss started (delayed, autostart-off)"
 done
-if [ -n "$MPSS" ]; then
-  echo "" > /sys/bus/platform/devices/4080000.remoteproc/driver_override 2>/dev/null
-  echo 4080000.remoteproc > /sys/bus/platform/drivers/qcom_q6v5_pas/bind 2>/dev/null
-  echo start > "$MPSS/state" 2>/dev/null && log "mpss unsealed (async)"
-fi
 
 # boot 首步：非在役槽归位 power-off（运行态非持久，reboot 后双 active 会触发 MM
 # 双卡漂移循环；QMI 等待 60s→300s——一百零八~一零九 boot 实锤 modem 慢启[IPA fatal

@@ -5,10 +5,10 @@ Wants=cell-keeper.service
 
 [Service]
 Type=simple
-TimeoutStartSec=300
-# 等 mpss/QMI 族起来（rmtfs 收敛）后拨数据面；超时 120s 兜底
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 24); do timeout 10 qmicli -d qrtr://0 --dms-get-operating-mode 2>/dev/null | grep -q "Mode:" && exit 0; sleep 5; done; exit 0'
-ExecStart=/bin/sh -c 'sleep 15; sh /usr/lib/meizu20/d1_dataup.sh 223.5.5.5 >> /var/log/cell-keeper.log 2>&1'
+# r69：QMI 等待移入 ExecStart 本体——Type=simple 下 start job 随 fork 即刻
+# 落地，multi-user 不再被 QMI 等待拖 ~2min（critical-chain 铁证）。拨号面保持
+# boot 后台化（MM bearer dial = IPA fatal 炸弹在册，官方 bearer 路不可抄）。
+ExecStart=/bin/sh -c 'for i in $(seq 1 24); do timeout 10 qmicli -d qrtr://0 --dms-get-operating-mode 2>/dev/null | grep -q "Mode:" && break; sleep 5; done; sleep 15; sh /usr/lib/meizu20/d1_dataup.sh 223.5.5.5 >> /var/log/cell-keeper.log 2>&1'
 
 [Install]
 WantedBy=multi-user.target

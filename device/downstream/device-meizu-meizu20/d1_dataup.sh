@@ -29,6 +29,9 @@ sleep 25  # ★modem 上下文落定窗：dial 后 ~25s 内 bounce 无效（11-1
 
 echo "== [3/5] rmnet0 (QMAP mux_id 1)"
 ip link show rmnet0 >/dev/null 2>&1 || ip link add link rmnet_ipa0 name rmnet0 type rmnet mux_id 1
+# r70: 先 flush 再 replace——dial 回现值/旧地址并存时 -I rmnet0 的源选择会踩
+# modem 已不路由的旧 context = 硬判假阴性（11-20 两 boot 实证双地址并存）。
+ip addr flush dev rmnet0 2>/dev/null
 ip addr replace "$ADDR/32" dev rmnet0
 ip link set rmnet0 up
 
@@ -43,8 +46,13 @@ bounce_ping() {
 	sleep 2
 	ip link set rmnet_ipa0 up
 	ip link set rmnet0 up
+	# r70: 接口 down 时内核顺带删掉挂在它上面的默认路由，up 后必须重铺
+	# （11-20 实证：bounce 后 rmnet0 默认路由消失 = 数据面塌点之一）。
+	ip route replace default dev rmnet0 metric 50 2>/dev/null
 	sleep 3
-	ping -c 3 -W 3 "$TGT" 2>/dev/null | grep -q "0% packet loss"
+	# r70: 判据硬判 = -I rmnet0——不带 -I 会走 wlan0/usb0 默认路由恒通
+	# （WiFi 共存语境 = 判据假绿，11-20 两 boot 实锤）。
+	ping -c 3 -W 3 -I rmnet0 "$TGT" 2>/dev/null | grep -q "0% packet loss"
 }
 i=1
 while [ "$i" -le 3 ]; do

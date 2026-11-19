@@ -6,7 +6,9 @@ enable meizu-amps.service
 # disable). Audio device days: systemctl start meizu-audio.service.
 disable meizu-audio.service
 enable meizu-retimer.service
-enable meizu-pas.service
+# r69: meizu-pas.service 退役 —— PAS 内核态自动 probe（pas/mss blacklist 摘除，
+# 官方时序照一加6/FP）。旧装机残留 enable 符号链接由 tmpfiles meizu20-retire-pas
+# .conf 清扫。
 enable meizu-quiet.service
 enable meizu-memsleep.service
 enable meizu-wfi.service
