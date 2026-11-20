@@ -65,4 +65,8 @@ while [ "$i" -le 3 ]; do
 	[ "$i" -le 3 ] && sleep 20
 done
 echo "FAIL: 3 轮未通（查 registered / TX-RX 计数 / 新崩）"
+# 死路不抢默认路由（2026-11-21 网络诊断轮）：dial 层成功≠IPA 数据面通，
+# TD-11 死窗语境下 metric 50 的 rmnet0 default 压过 wlan0(m600) 吃掉全部
+# 流量（WiFi 有网也"没网"）→ FAIL 时删掉，让 WiFi 接管日用；PASS 则保留。
+ip route del default dev rmnet0 metric 50 2>/dev/null
 exit 1
