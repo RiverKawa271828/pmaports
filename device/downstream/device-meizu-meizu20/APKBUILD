@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=73
+pkgrel=74
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -250,6 +250,12 @@ options="!check !archcheck"
 # （keeper 原本只守注册面，数据面死无人管）。TD-11 真凶 = 主线 DT 缺 IPA IMEM
 # 恒等映射（stock qcom,additional-mapping <0x146a8000 0x146a8000 0x2000>），
 # 内核 r131 DTS 补齐（shum-elli/meizu20-linux 轮实证）。
+# r74 (2026-11-22, r73 上机首 boot 双 bug 修): ①keeper 看门 grep 串
+# "default dev rmnet0 metric 700" 不匹配实际输出 "default dev rmnet0 scope link
+# metric 700"（scope link 隔中间）= 看门永不触发 → 放宽为 "default dev rmnet0"。
+# ②d1_dataup.sh dial 硬败不再读缓存地址走全流程（bindmux rc≠0 且无 addr = FAIL
+# 撤路由退出；本 boot 实证无卡态缓存旧地址 10.1.96.31 铺死路由 metric 700；
+# rc=0 无 addr 的回现值缓存兜底保留）。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -651,9 +657,9 @@ d3ddf06d51b7220a28ad2f4722ab5cd5b8e589c3570574ad5ba81c3b825d74b7c768c5831a927ad2
 8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  postlogin
 b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080ccda48d6d6aacf83f503a104299283afb4cde306a8e17c9ee  meizu20-pulseaudio-no-x11.conf
 7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
-b31b7521e3535aadf0dfb9266b2e6b0d935b3d0372f9e51f5d1f391c2a20fe5a256ad29d0b36c00fdb0ca696a05aac76853c9d80da88290bd1b74bd628ffa860  cell-keeper.sh
+e5fedadf98d8e6cd23c1ea50f66ea0815468b093f56c62dafca8587e724447406d9dcac5fb69d462dfe9f3db7f895ffd2368fbfefd7d91ba974d85dda133db1e  cell-keeper.sh
 0a48323405f91315ac461b913fe5883c5e50b7b0db6eb2a25c05c53ded1ded7561d3e37c0546a311454c72eef20dd7adcfcc99c9a113ed6f31b160c02d89fbef  cell-switch.sh
-5ff1156c02ae3565cb59acd3d41dcf771dd68624496a368d1468989e6f778c6ac55b0734713d7a232bb8b6296de791f62dfc7cf660dd6fb4ad35803efd062e71  d1_dataup.sh
+4372c324c5d2e040ead18ae1ec5d6039c6bd2d4c235dd65c0fa3fb95c54cf05509118b442ce42dafd41f0ba43a6e303ea01287c948b2e2b5b4f7ddd160fa1a30  d1_dataup.sh
 f3b0988ec1749f387a1141d6615b0ca570262435506e09f006e5d3aae70130731221083db05e9cccdb2b15c45c04c9d6f9e1c66ad3ef33522f2c6f0f4e615713  d1_bindmux.py
 ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
 6c42d4594928f56b89b547a00c3aee2b27393f324bf21e78a2240b5735855b8e235333c418fd4bce2d57ca6e8a222f5e086eb65b3c5d21368a16c45ed3ae955e  cell-dataup.service

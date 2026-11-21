@@ -24,9 +24,18 @@ echo "== [1/5] DPM open port"
 qmicli -d qrtr://0 --dpm-open-port="hw-data-ep-type=embedded,hw-data-ep-iface-number=1,hw-data-rx-id=2,hw-data-tx-id=24" 2>&1 | tail -1
 
 echo "== [2/5] WDS dial (bind mux -> bind sub -> start network)"
-OUT=$(python3 /usr/lib/meizu20/d1_bindmux.py 2>&1)
+OUT=$(python3 /usr/lib/meizu20/d1_bindmux.py 2>&1); BMRC=$?
 echo "$OUT" | tail -2
 ADDR=$(echo "$OUT" | sed -n 's/.*addr=\([0-9.]*\) .*/\1/p')
+# r74: dial 层失败（bindmux rc≠0 = mux 全拒/start network 拒）且无 addr = 硬 FAIL，
+# 不再读缓存地址走全流程（无卡/未注册语境 = 铺一条注定死的默认路由；本 boot 实证
+# 旧地址 10.1.96.31 缓存兜底死路铺 metric 700）。rc=0 但 addr 行解析失败 = 保留
+# 缓存兜底（dial 非 idempotent 回现值场景，11-19 实测）。
+if [ "$BMRC" != 0 ] && [ -z "$ADDR" ]; then
+	echo "FAIL: dial 未通（bindmux rc=$BMRC，查 registered 态/卡在位）"
+	ip route del default dev rmnet0 metric 700 2>/dev/null
+	exit 1
+fi
 [ -z "$ADDR" ] && ADDR=$(cat /root/.d1-addr 2>/dev/null)
 [ -z "$ADDR" ] && { echo "FAIL: 无地址（dial 未通，查 registered 态）"; exit 1; }
 sleep 25  # ★modem 上下文落定窗：dial 后 ~25s 内 bounce 无效（11-19 三连实测钉死：5s 败/裸 bounce 通/25s 通）

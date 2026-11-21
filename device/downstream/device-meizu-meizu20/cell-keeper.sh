@@ -90,7 +90,7 @@ while :; do
     # 本轮 boot 实证），死路由残留 = 黑洞；WiFi 在时它只是备胎无害，WiFi 掉时
     # 却独占默认路由吃掉全部流量。路由在位时每轮 -I rmnet0 硬判一发，两连败
     # = 撤路由（复活 = 重启 dataup 或 cell-switch 后重跑 d1_dataup.sh）。
-    if ip route show 2>/dev/null | grep -q "default dev rmnet0 metric 700"; then
+    if ip route show 2>/dev/null | grep -q "default dev rmnet0"; then
       if ! ping -c 1 -W 5 -I rmnet0 223.5.5.5 >/dev/null 2>&1; then
         sleep 10
         if ! ping -c 1 -W 5 -I rmnet0 223.5.5.5 >/dev/null 2>&1; then
