@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=72
+pkgrel=73
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -242,6 +242,14 @@ options="!check !archcheck"
 # 内核删路由 = 塌点）+ addr flush 防 dial 回现值双地址（-I 源选择踩旧 context
 # = 假阴性）+ 判据 ping 加 -I rmnet0 硬判（裸 ping 走 wlan0/usb0 = WiFi 共存
 # 语境判据假绿，103~109 历史 PASS 语境存疑）。
+# r73 (2026-11-22, WiFi 无网络轮 + TD-11 根修配套): ①d1_dataup.sh 路由策略 =
+# WiFi 优先——蜂窝默认路由 metric 50→700（wlan0 DHCP=600 压过蜂窝；WiFi 掉线
+# 时蜂窝独占默认路由自动接管；本 boot 实证数据面 PASS 后静默死[TX 108/RX 0
+# 无 fatal]，metric 50 死路由残留 = WiFi 黑洞真凶）。②cell-keeper.sh 加数据
+# 面看门：rmnet0 默认路由在位时每轮 -I 硬判一发，两连败撤路由让 WiFi 接管
+# （keeper 原本只守注册面，数据面死无人管）。TD-11 真凶 = 主线 DT 缺 IPA IMEM
+# 恒等映射（stock qcom,additional-mapping <0x146a8000 0x146a8000 0x2000>），
+# 内核 r131 DTS 补齐（shum-elli/meizu20-linux 轮实证）。
 depends="
 	iw
 	linux-meizu-meizu20
