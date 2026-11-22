@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=74
+pkgrel=75
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -256,6 +256,36 @@ options="!check !archcheck"
 # ②d1_dataup.sh dial 硬败不再读缓存地址走全流程（bindmux rc≠0 且无 addr = FAIL
 # 撤路由退出；本 boot 实证无卡态缓存旧地址 10.1.96.31 铺死路由 metric 700；
 # rc=0 无 addr 的回现值缓存兜底保留）。
+# r75 (2026-11-22, 数据面自动化固化 = 新 Release 前置排面 A): 手工 DPM+WDS 链
+# （d1_dataup.sh/d1_bindmux.py/cell-dataup.service）判负退役——一百二十·终验实锤
+# dial 通但 modem 侧 IPA 通道语义缺（bounce 一发 RX 秒死两 boot 复现）。数据面
+# 正解 = MM 拨号形态（同轮终验 ③：MM restart 重扫 → simple-connect apn=cbnet →
+# MM 自建 qmapmux0.0@rmnet_ipa0 → -I 硬判 12/12 长稳）：
+# ① mm-dial.sh + mm-dial.service —— boot 数据面自动化（Type=simple 零硬等待，
+#    r66/r69 律；failed 死锁 restart 重扫一次；bearer 活体取 IP/prefix/gw/DNS；
+#    铺 addr/route metric 700 = WiFi 优先；resolvectl 挂 bearer DNS
+#    default-route false = WiFi 优先解析/WiFi 掉蜂窝兜底；-I qmapmux0.0 硬判
+#    3 轮收敛；dial 硬败不走缓存 = FAIL 撤路由诚实退出[无卡 boot = 预期 failed
+#    无害在册，复活 = 插卡 restart mm-dial]）；
+# ② cell-keeper.sh 数据面看门 rmnet0 → qmapmux0.0 形态适配（判活/撤路全部跟
+#    qmapmux；复活提示 = restart mm-dial）；
+# ③ cell-switch.sh 尾接 mm-dial 自动重拨（数据面跟卡走）；
+# ④ tmpfiles meizu20-retire-dataup.conf（旧装机 cell-dataup enable 残链清扫，
+#    照 retire-pas 先例）+ preset enable dataup→mm-dial 换防 + NM unmanaged
+#    名单加 qmapmux*（MM mux 子接口结构性隔离，防 NM 半接管）。
+# ⑤ meizu20-dma-heap.conf（modules-load.d：system_heap/cma_heap boot 自载，
+#    排面 B 配套）：CONFIG_DMABUF_HEAPS_{SYSTEM,CMA}=m 久在但 misc 设备无
+#    open-time autoload（r59 uinput 同类），/dev/dma_heap 缺席 = libcamera
+#    SoftwareIsp 无分配器 = 纯 RAW 配置被 QtMultimedia 拒（11-22 探针
+#    "The configuration is not valid" 实锤）。
+# NM×qmapmux 集成挂候补不挡发布（排面 A）。
+# ⚠11-22 上机新雷（B 件 GUI 探针触发，挂候补）：plasma-camera 第二轮真正上电
+#    3P9 链（csiphy2 power-on @uptime10714）→ rpmh_write_batch AMC -110
+#    （uptime10960，RPM 固件通信超时，任务=CameraManager 实锤）→ icc 互斥锁
+#    雪崩（GPU gmu suspend 卡 icc_set_bw / sugov 卡 RPMH / jbd2/sda22 卡
+#    bio_queue_enter = UFS 队列冻结磁盘半瘫）→ sysrq-b 救回。108「camss 流挂
+#    D 态」家族的 RPMH 级变体；复燃条件与根因 = camss/RPMH 内核专项，GUI 相机
+#    上电路径在根治前有平台死锁风险。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -352,13 +382,14 @@ makedepends="devicepkg-dev"
 	52_waydroid.nft
 	cell-keeper.sh
 	cell-switch.sh
-	d1_dataup.sh
-	d1_bindmux.py
+	mm-dial.sh
+	mm-dial.service
 	cell-keeper.service
-	cell-dataup.service
 	10-unlimited-retry.conf
 	meizu20-tftp-root.conf
 	meizu20-retire-pas.conf
+	meizu20-retire-dataup.conf
+	meizu20-dma-heap.conf
 	meizu20-sensors-tempjson.conf
 	00-nura-qrtr-unmanaged.conf
 "
@@ -569,16 +600,15 @@ package() {
 	# system (flush ruleset kills the lxc tables; restart nftables ditto).
 	install -Dm644 "$srcdir/52_waydroid.nft" \
 		"$pkgdir"/etc/nftables.d/52_waydroid.nft
-	# r64: cellular automation four + two companions (see r64 note above).
+	# r64: cellular automation (see r64 note above); r75: mm-dial replaces
+	# the retired d1_dataup/bindmux DPM chain.
 	install -Dm755 "$srcdir/cell-keeper.sh" \
 		"$pkgdir"/usr/lib/meizu20/cell-keeper.sh
-	install -Dm755 "$srcdir/d1_dataup.sh" \
-		"$pkgdir"/usr/lib/meizu20/d1_dataup.sh
-	install -Dm755 "$srcdir/d1_bindmux.py" \
-		"$pkgdir"/usr/lib/meizu20/d1_bindmux.py
+	install -Dm755 "$srcdir/mm-dial.sh" \
+		"$pkgdir"/usr/lib/meizu20/mm-dial.sh
 	install -Dm755 "$srcdir/cell-switch.sh" \
 		"$pkgdir"/usr/bin/cell-switch.sh
-	for u in cell-keeper cell-dataup; do
+	for u in cell-keeper mm-dial; do
 		install -Dm644 "$srcdir/$u.service" \
 			"$pkgdir"/usr/lib/systemd/system/$u.service
 	done
@@ -589,10 +619,13 @@ package() {
 		"$pkgdir"/usr/lib/NetworkManager/conf.d/00-nura-qrtr-unmanaged.conf
 	# r69: tmpfiles 三件（TFTP 根持久化 / meizu-pas 退役清扫 / temp.json 可写
 	# 路径，详见 r69 注记）。
-	for t in meizu20-tftp-root meizu20-retire-pas meizu20-sensors-tempjson; do
+	for t in meizu20-tftp-root meizu20-retire-pas meizu20-retire-dataup meizu20-sensors-tempjson; do
 		install -Dm644 "$srcdir/$t.conf" \
 			"$pkgdir"/usr/lib/tmpfiles.d/$t.conf
 	done
+	# r75: dma-buf heaps boot load (libcamera SoftwareIsp allocator; r75 note ⑤).
+	install -Dm644 "$srcdir/meizu20-dma-heap.conf" \
+		"$pkgdir"/usr/lib/modules-load.d/meizu20-dma-heap.conf
 	# r66: 掩蔽上游 hexagonrpcd-adsp-sensorspd（与本机 udev 触发的 meizu-sensorspd
 	# 抢 ADSP 默认监听器位 → 本机必败重启环 = "ssc sensor session 很难起来"本体；
 	# 正主 = meizu-sensorspd[10-03 完整配方 -s -R]，udev 72 号规则触发）
@@ -608,7 +641,7 @@ aa684e2cb113d7abe78b45935d52b9bf38b0660198ae43be3ad4d7176f4ad7eaa9ad974a574bb2af
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-df3ed3ae08321d3415bf1cb615ad15f549575cb40a69c7caf3216fec09957d3d087ad4b66dbd50433cca8db857757807acb76a25e823d9c0a8007767b4bede85  80-device-meizu-meizu20.preset
+29f58ba821ffdcda48486dff419fa20f85aa7734bdd29ef4fd24eb718d06678849d50482d93b8d8ce735e44ddf8689fd2e4e9cc09a797abe0bb6b89c2f818743  80-device-meizu-meizu20.preset
 30e58a156a5b4f4b40f9a164e95cfb242c82a78f6576e534ee0e9ad08b19e4a11b9285df9d4810b42c252ff764fe3967efb0368d874ec3bc6fa973a70e25c36e  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -657,15 +690,15 @@ d3ddf06d51b7220a28ad2f4722ab5cd5b8e589c3570574ad5ba81c3b825d74b7c768c5831a927ad2
 8f09477e3c181ab83276f5bb251e545e2132865c80b3ded91a374797140f7947f6350388ce9d207224c74b3596741a3fc7cfc474b463a830a607d151c20679fc  postlogin
 b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080ccda48d6d6aacf83f503a104299283afb4cde306a8e17c9ee  meizu20-pulseaudio-no-x11.conf
 7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
-e5fedadf98d8e6cd23c1ea50f66ea0815468b093f56c62dafca8587e724447406d9dcac5fb69d462dfe9f3db7f895ffd2368fbfefd7d91ba974d85dda133db1e  cell-keeper.sh
-0a48323405f91315ac461b913fe5883c5e50b7b0db6eb2a25c05c53ded1ded7561d3e37c0546a311454c72eef20dd7adcfcc99c9a113ed6f31b160c02d89fbef  cell-switch.sh
-4372c324c5d2e040ead18ae1ec5d6039c6bd2d4c235dd65c0fa3fb95c54cf05509118b442ce42dafd41f0ba43a6e303ea01287c948b2e2b5b4f7ddd160fa1a30  d1_dataup.sh
-f3b0988ec1749f387a1141d6615b0ca570262435506e09f006e5d3aae70130731221083db05e9cccdb2b15c45c04c9d6f9e1c66ad3ef33522f2c6f0f4e615713  d1_bindmux.py
+db01bd2824ccd259a0f5abf3c6476c20e702d20e2d726e64dd4138e97801567ae8dfbd3eaec791565ce140097083c0fc35bdce6a05301dcca6d46c8acd55a990  cell-keeper.sh
+14abc051edc6b908d8b149801beb3cca8bea2b193e497933a464df96706acc3aa9352816829b021c6c73fa25b9b24e6ee4ef67bc7714622c3c4f75b0d3bdf3c6  cell-switch.sh
+8f4286b919dc359e1481bf3049f040f245b7235064b85d16bb0fa1b9ace674815c9dddf1e9e46be8f8086e27689471886445755a4db0627d78288c32971ad9f1  mm-dial.sh
+d1835c1db6fa1d8c5e963edbc7921a4987268e9785a6c314917463b2a3da30fb7634068d8a4b408169d08ae67b20e9f362030e3c4527809174b2834dbbb2e5a3  mm-dial.service
 ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
-6c42d4594928f56b89b547a00c3aee2b27393f324bf21e78a2240b5735855b8e235333c418fd4bce2d57ca6e8a222f5e086eb65b3c5d21368a16c45ed3ae955e  cell-dataup.service
 d2d7ab5a091bb2bac791497d462e6a9ea01f5a335c37becf77a50849c4d20885e7cfda86544a2047d6a995370c0e496ec8188dfcd73f6913068a3159ff557de1  10-unlimited-retry.conf
 877a424cd96715ee647c0324755c66a72068a9293f549303e37d1f907fdf6c0ff35e98691a847823481a605e534d93e61dc8086160de3b1cc6716aa91ae31704  meizu20-tftp-root.conf
 d987fd43595210047d4f9143e33b6b3f08cef572369afbbc1be309108e140a15946210e43332a2a143bbb8c73908fc3169b9173d48b831b20d19a2e9e591bad7  meizu20-retire-pas.conf
+9b0cd1184f870dce3de5970dd474f1ef1d716939c569bd58c673d6bae74870032c10b84c0b698f85d6500c520376ea90b74f2944f7dbc7b26f46834035823f28  meizu20-retire-dataup.conf
 4e18e951b87c0bca73c18d210aef8154d0cfcc47ab0241604d0a37a0618e46cca027f8c5edceccbc64be3853f534488224fc95b7e1d5189954b3e695eadb25de  meizu20-sensors-tempjson.conf
-e25e3899c7964c428409e914875fcb731cd7fbfc8a37e787b8b5d37b971753b052ae282d50e0a8c3b22e90b1b0fe43eef6715b3b5774f222f1f4e368151ddf0d  00-nura-qrtr-unmanaged.conf
+fd7dd94f59b54a1efd6c17e23f09ecf5c6650ef93c940c95582c92ee01e91f32a773c9f275c4bd04afc6cf54365f4206c9ee82f5e54e39682e21b41a924ba781  00-nura-qrtr-unmanaged.conf
 "

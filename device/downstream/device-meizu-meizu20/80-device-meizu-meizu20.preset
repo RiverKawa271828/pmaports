@@ -50,8 +50,9 @@ enable meizu-audio-route.service
 # starts the container; keep the boot clean.
 disable waydroid-container.service
 # r64 (2026-11-19): cellular automation (plug-in-SIM-works chain, tools/
-# cellular packaging round). keeper = registration self-heal guard;
-# dataup = boot data-plane oneshot. Preset affects fresh installs only -
-# the live device's hand-laid enable state survives apk upgrades.
+# cellular packaging round). keeper = registration self-heal guard.
+# r75 (2026-11-22): cell-dataup 退役（手工 DPM 链判负，一百二十终验）——数据面
+# = mm-dial（MM 拨号形态 + qmapmux0.0 铺配置）。旧装机 cell-dataup enable 残链
+# 由 tmpfiles meizu20-retire-dataup.conf 清扫。
 enable cell-keeper.service
-enable cell-dataup.service
+enable mm-dial.service
