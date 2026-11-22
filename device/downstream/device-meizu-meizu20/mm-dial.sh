@@ -16,11 +16,13 @@ LOG=/var/log/cell-keeper.log
 TGT="${1:-223.5.5.5}"
 
 log() { echo "$(date '+%m-%d %H:%M:%S') [mm-dial] $*" >> "$LOG"; }
-mm() { timeout 15 mmcli -m any 2>/dev/null; }
-# r76: mmcli 的 state 是裸值（无引号，qmicli 才有引号格式），且 "state:" 还会撞
-# "power state:"——首条 "| state:" 精确锚定（11-22 上机首验：解析空 = failed
-# 重扫分支永不触发，撞 "no Simple capabilities" 兜底 FAIL）。
-mm_state() { mm | sed -n 's/^ *| *state: *//p' | head -1; }
+# r77: mmcli 输出带 ANSI 色码（state 值 = ESC[31mfailed[0m，管道下也上色）——
+# mm() 统一剥码，全部解析吃干净输出（r75/r76 两轮解析坑：引号假设/锚行撞
+# "power state:"/色码污染，11-22 上机三轮实证）。
+mm() { timeout 15 mmcli -m any 2>/dev/null | tr -d '\033' | sed 's/\[[0-9;]*m//g'; }
+# state 锚定 = "*| state:"（state 在 Status 头行上，前有 "Status" 文本；
+# "power state:" 不匹配）。
+mm_state() { mm | sed -n 's/.*| *state: *//p' | head -1; }
 
 wait_modem() { # wait_modem <轮数> -> 0 = MM 有 modem 对象（10s/轮）
 	i=1

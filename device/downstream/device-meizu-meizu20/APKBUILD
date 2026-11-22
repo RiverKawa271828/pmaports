@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=76
+pkgrel=77
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -290,6 +290,10 @@ options="!check !archcheck"
 # 是裸值（qmicli 才有引号格式），且 grep "state:" 撞 "power state:" = 解析恒空 =
 # failed→restart 重扫分支永不触发（无卡态撞 "no Simple capabilities" 兜底 FAIL，
 # 诚实性未破但走错分支）。改 = 首条 "| state:" 精确锚定（sed -n 's/^ *| *state: *//p'）。
+# r77 (2026-11-22, r76 二验修): mmcli 输出带 ANSI 色码（管道下也上色，state 值 =
+# ESC[31mfailed[0m）= 比较永假依旧走错分支；mm() 统一剥码 + state 锚定改
+# ".*| *state:"（state 在 Status 头行上，前有 Status 文本；power state 不匹配）。
+# 设备直验：解析输出干净 "failed" ✓。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -696,7 +700,7 @@ b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080c
 7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
 db01bd2824ccd259a0f5abf3c6476c20e702d20e2d726e64dd4138e97801567ae8dfbd3eaec791565ce140097083c0fc35bdce6a05301dcca6d46c8acd55a990  cell-keeper.sh
 14abc051edc6b908d8b149801beb3cca8bea2b193e497933a464df96706acc3aa9352816829b021c6c73fa25b9b24e6ee4ef67bc7714622c3c4f75b0d3bdf3c6  cell-switch.sh
-8f4286b919dc359e1481bf3049f040f245b7235064b85d16bb0fa1b9ace674815c9dddf1e9e46be8f8086e27689471886445755a4db0627d78288c32971ad9f1  mm-dial.sh
+3f7c426ced822dcc6443475cacd312e6b0c558abbc0b465ae62a370efe0f4284781ba9204bb0e9484f6974c05624b9d9a13b300db09ea80a4d304149148719b2  mm-dial.sh
 d1835c1db6fa1d8c5e963edbc7921a4987268e9785a6c314917463b2a3da30fb7634068d8a4b408169d08ae67b20e9f362030e3c4527809174b2834dbbb2e5a3  mm-dial.service
 ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
 d2d7ab5a091bb2bac791497d462e6a9ea01f5a335c37becf77a50849c4d20885e7cfda86544a2047d6a995370c0e496ec8188dfcd73f6913068a3159ff557de1  10-unlimited-retry.conf
