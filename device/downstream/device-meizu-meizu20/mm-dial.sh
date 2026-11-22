@@ -17,7 +17,10 @@ TGT="${1:-223.5.5.5}"
 
 log() { echo "$(date '+%m-%d %H:%M:%S') [mm-dial] $*" >> "$LOG"; }
 mm() { timeout 15 mmcli -m any 2>/dev/null; }
-mm_state() { mm | grep "state:" | tail -1 | grep -o "'[a-z-]*'" | tr -d "'"; }
+# r76: mmcli 的 state 是裸值（无引号，qmicli 才有引号格式），且 "state:" 还会撞
+# "power state:"——首条 "| state:" 精确锚定（11-22 上机首验：解析空 = failed
+# 重扫分支永不触发，撞 "no Simple capabilities" 兜底 FAIL）。
+mm_state() { mm | sed -n 's/^ *| *state: *//p' | head -1; }
 
 wait_modem() { # wait_modem <轮数> -> 0 = MM 有 modem 对象（10s/轮）
 	i=1
