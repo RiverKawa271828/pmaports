@@ -1,0 +1,17 @@
+[Unit]
+Description=Meizu20: boot-time MM failed-state rescue (restart rescan; ex-mm-dial [1/6]+[2/6], r81)
+# r81 (P3 蜂窝标准化): mm-dial boot 退役后其内嵌的 boot 救援（等 modem 对象 +
+# failed→restart MM 重扫）随之消失——本平台 MM×qcom-soc boot 竞速常态性落
+# failed（r80 reboot 实证），无人救援则 NM autoconnect 永远 unavailable。
+# 本件只救 modem 状态，不拨号不铺路：数据面仍 = NM 标准形态（MM 恢复后
+# NM autoconnect 自己跟上来）。Type=oneshot 但等待全在脚本本体、有界（≤4min）；
+# ⚠ After= 列表严禁 multi-user.target（meizu-pas 自环拖死 ordering 前科）。
+After=rmtfs.service ModemManager.service cell-keeper.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /usr/lib/meizu20/cell-mm-rescue.sh
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

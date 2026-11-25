@@ -43,5 +43,8 @@ echo "== MM rescan =="
 systemctl restart ModemManager
 # r75: 数据面自动化跟卡走——MM rescan 后重跑 mm-dial（新卡 simple-connect +
 # qmapmux 铺配置）。Type=simple job 随 fork 落地不等窗；无卡态 = 脚本内诚实 FAIL。
-systemctl try-restart mm-dial.service >/dev/null 2>&1 || true
-echo "done. (MM rescan ~15s; 数据面 = mm-dial 自动重拨)"
+# r80 (P3 蜂窝标准化): mm-dial boot 退役，数据面 = NM autoconnect 自动跟卡
+# （MM rescan → NM 侧 gsm profile 自动重连；★单 call 域，勿再显式拨 mm-dial
+# 否则 call-already-present 双死）。profile 与卡 APN 不匹配时运营商通常仍受理
+# （cbnet 在移动卡实测受理）；UI 里切换 profile 亦可。
+echo "done. (MM rescan ~15s; 数据面 = NM autoconnect 自动跟卡)"

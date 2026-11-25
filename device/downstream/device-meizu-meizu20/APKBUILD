@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=79
+pkgrel=81
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -315,6 +315,27 @@ options="!check !archcheck"
 # ★同轮并存定谳：本平台 IPA 路径 = 单 call 域——mm-dial 占线时 NM 激活
 # （cmnet）= call-already-present 冲突且 MM 断开流程把旧 bearer 带走（双死），
 # NM 与 mm-dial 互斥不可并存；P3 取舍从「可能」变「确定」（详见 nura 执行卡）。
+# r80 (2026-11-25, P3 蜂窝标准化——用户拍板「跟着上游来」)：数据面交还 NM 标准
+# 形态。依据 = 11-25 P2 实测：NM 拨号全链通（qmapmux0.0 IP + 表 1430 + WiFi
+# 掉线时默认路由晋升主表 = failover 原生可用；DNS 断粮时 resolved 走上游默认
+# FallbackDNS 兜底实证可解析）+ 单 call 域互斥。改动四件：
+# ① 两枚 profile autoconnect=true（上游默认；单 active 槽姿态在位压制 104 循环）；
+# ② preset mm-dial enable→disable（boot 数据面 = NM autoconnect；unit 保留 ship
+#    供手工救援）；旧装机 enable 残链 = tmpfiles meizu20-retire-mmdial.conf 清扫
+#    （retire-pas/dataup 先例）；
+# ③ cell-switch.sh 数据尾改 NM autoconnect 跟卡（显式 mm-dial 重拨 = 双死路径）；
+# ④ keeper 不动——其数据面看门只 grep 主表 qmapmux 默认路由，NM 形态路由在表
+#    1430 ⇒ 结构性失活；注册面自愈照旧。
+# DNS 已知小缺口（接受）：NM 收到 carrier DNS 但不推 resolved（qmapmux 被注册为
+# Generic device，push 环节 NM 侧断），断 WiFi 时走 FallbackDNS（quad9）——
+# 纯上游默认行为，非功能缺口；复燃 = NM upstream 查 push 路径。
+# r81 (2026-11-25, P3 reboot 全验暴露的隐性依赖)：mm-dial 退役连带拔掉了它内嵌的
+# boot 救援（[1/6] 等 modem 对象 + [2/6] failed→restart MM 重扫）——本平台
+# MM×qcom-soc boot 竞速常态性落 failed/power-off（r80 reboot 实证：无人救援 ⇒
+# NM autoconnect 永远 unavailable ⇒ 蜂窝数据 boot 不起）。补 cell-mm-rescue
+# oneshot 两件（.sh + .service）：只救 modem 状态（failed→restart MM，≤2 轮有界），
+# 不拨号不铺路——数据面仍 = NM 标准形态；preset enable；无卡重扫一次无害
+# （r75 时代每 boot 都在做）。⚠unit After 严禁 multi-user.target（pas 自环前科）。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -413,11 +434,14 @@ makedepends="devicepkg-dev"
 	cell-switch.sh
 	mm-dial.sh
 	mm-dial.service
+	cell-mm-rescue.sh
+	cell-mm-rescue.service
 	cell-keeper.service
 	10-unlimited-retry.conf
 	meizu20-tftp-root.conf
 	meizu20-retire-pas.conf
 	meizu20-retire-dataup.conf
+	meizu20-retire-mmdial.conf
 	meizu20-dma-heap.conf
 	meizu20-sensors-tempjson.conf
 	00-nura-qrtr-unmanaged.conf
@@ -637,6 +661,11 @@ package() {
 		"$pkgdir"/usr/lib/meizu20/cell-keeper.sh
 	install -Dm755 "$srcdir/mm-dial.sh" \
 		"$pkgdir"/usr/lib/meizu20/mm-dial.sh
+	# r81: boot-time MM failed-state rescue (ex-mm-dial [1/6]+[2/6]; see r81 note)
+	install -Dm755 "$srcdir/cell-mm-rescue.sh" \
+		"$pkgdir"/usr/lib/meizu20/cell-mm-rescue.sh
+	install -Dm644 "$srcdir/cell-mm-rescue.service" \
+		"$pkgdir"/usr/lib/systemd/system/cell-mm-rescue.service
 	install -Dm755 "$srcdir/cell-switch.sh" \
 		"$pkgdir"/usr/bin/cell-switch.sh
 	for u in cell-keeper mm-dial; do
@@ -657,7 +686,7 @@ package() {
 	done
 	# r69: tmpfiles 三件（TFTP 根持久化 / meizu-pas 退役清扫 / temp.json 可写
 	# 路径，详见 r69 注记）。
-	for t in meizu20-tftp-root meizu20-retire-pas meizu20-retire-dataup meizu20-sensors-tempjson; do
+	for t in meizu20-tftp-root meizu20-retire-pas meizu20-retire-dataup meizu20-retire-mmdial meizu20-sensors-tempjson; do
 		install -Dm644 "$srcdir/$t.conf" \
 			"$pkgdir"/usr/lib/tmpfiles.d/$t.conf
 	done
@@ -679,7 +708,7 @@ aa684e2cb113d7abe78b45935d52b9bf38b0660198ae43be3ad4d7176f4ad7eaa9ad974a574bb2af
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-29f58ba821ffdcda48486dff419fa20f85aa7734bdd29ef4fd24eb718d06678849d50482d93b8d8ce735e44ddf8689fd2e4e9cc09a797abe0bb6b89c2f818743  80-device-meizu-meizu20.preset
+7d69fb2c11a483d2cda24b1efc1560331493c1ac225f93c9a70b002b208ba0d8c8ffdd62588e3a229c7606271af6080ff93b375c5e742a1faa1f054d613dad37  80-device-meizu-meizu20.preset
 30e58a156a5b4f4b40f9a164e95cfb242c82a78f6576e534ee0e9ad08b19e4a11b9285df9d4810b42c252ff764fe3967efb0368d874ec3bc6fa973a70e25c36e  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -729,17 +758,20 @@ d3ddf06d51b7220a28ad2f4722ab5cd5b8e589c3570574ad5ba81c3b825d74b7c768c5831a927ad2
 b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080ccda48d6d6aacf83f503a104299283afb4cde306a8e17c9ee  meizu20-pulseaudio-no-x11.conf
 7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
 db01bd2824ccd259a0f5abf3c6476c20e702d20e2d726e64dd4138e97801567ae8dfbd3eaec791565ce140097083c0fc35bdce6a05301dcca6d46c8acd55a990  cell-keeper.sh
-14abc051edc6b908d8b149801beb3cca8bea2b193e497933a464df96706acc3aa9352816829b021c6c73fa25b9b24e6ee4ef67bc7714622c3c4f75b0d3bdf3c6  cell-switch.sh
+5ac57ec600a8bb2dab55297c6191c09e935966fb7c93eebd0a1636f237907cb2ff9aaf95aabcbb41328ff34a9435da9d5ef52b3fa20f4fd86dde7e92a78624b6  cell-switch.sh
 dbf2d1c1ee587d39a6b7cf63233a587ad99341596735c6db4a8eda647c23e9ca9c0b7997e8ef5c7d0a2f576e8e1be3c9908783557efea0b9ba1527a83e12725a  mm-dial.sh
 d1835c1db6fa1d8c5e963edbc7921a4987268e9785a6c314917463b2a3da30fb7634068d8a4b408169d08ae67b20e9f362030e3c4527809174b2834dbbb2e5a3  mm-dial.service
+5c42859a07a293a8074477767043022bd1025df4568cd397a56cfa0f4a7f7cd01d39f5e7f5355992628c01fa1ec689dc9157a9ea78b197d8bdad736863d8cd21  cell-mm-rescue.sh
+0be6a7f2178c131c435917cdde2535e0f22aa40e2ce4d7d6891665e8d036393decd03728efd141ff77f1d864d472d1f1605356cb3586cc3ea0c38483598ad019  cell-mm-rescue.service
 ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
 d2d7ab5a091bb2bac791497d462e6a9ea01f5a335c37becf77a50849c4d20885e7cfda86544a2047d6a995370c0e496ec8188dfcd73f6913068a3159ff557de1  10-unlimited-retry.conf
 877a424cd96715ee647c0324755c66a72068a9293f549303e37d1f907fdf6c0ff35e98691a847823481a605e534d93e61dc8086160de3b1cc6716aa91ae31704  meizu20-tftp-root.conf
 d987fd43595210047d4f9143e33b6b3f08cef572369afbbc1be309108e140a15946210e43332a2a143bbb8c73908fc3169b9173d48b831b20d19a2e9e591bad7  meizu20-retire-pas.conf
 9b0cd1184f870dce3de5970dd474f1ef1d716939c569bd58c673d6bae74870032c10b84c0b698f85d6500c520376ea90b74f2944f7dbc7b26f46834035823f28  meizu20-retire-dataup.conf
+55843c5acbfa966b80eebd09436d2a3e8537d70f354db967e4b7ca335068ac708314bbcf4f2765f3b50726f6e2e0de610c8339dd48b4133bc8c5f4e65dd025ed  meizu20-retire-mmdial.conf
 82c4ece11598800068fe902cfd04bd9ab7c5ea9146a623fc0fe7bfd914e47c8ff15a026302d34e8d6976b952d732c7d6cac242a82597e624bca9e007291ff6ea  meizu20-dma-heap.conf
 4e18e951b87c0bca73c18d210aef8154d0cfcc47ab0241604d0a37a0618e46cca027f8c5edceccbc64be3853f534488224fc95b7e1d5189954b3e695eadb25de  meizu20-sensors-tempjson.conf
 2a19289ecec6ef5c6f7de694b96bcc2664d09cae9597daf8f08446bdf9f83d4e4e5b28bcd073b0f42f55ad64cad397244d00da42758bf0c54c05dec4bbe07eda  00-nura-qrtr-unmanaged.conf
-dc03c924bb38a484f046600767ca4eb04a46f5ccca8332f0245410692ad73b01226ae6273911d2b13a9880eba0e617074f8fe6f81c609db70852c2da44e6d09c  meizu-mobile-data-cbnet.nmconnection
-c8335752c10620ee5caea381d9d584ec0f94dcfe736a62dd78999264f0979f67a333a47dad6e79c4854d13408f6be76652ad9104223d86c126d6e831ca065e79  meizu-mobile-data-cmnet.nmconnection
+9aebfd157f42372c1a67abb9885a757c0bab50dc347f8ea7302983c6f69756a568f8433877bd6f3d0012c9fa0c1f9f56da89e7ffbd421140a2e6875f06aff3da  meizu-mobile-data-cbnet.nmconnection
+af925c188cd343aec550a531e20c67a009969a7d4e773661d13d841f917a503b611faec1cce976d3c2ef8a4939c5c62cba79fc6093f408f7eeb0758090ba70c2  meizu-mobile-data-cmnet.nmconnection
 "

@@ -1,11 +1,13 @@
-# r78: 移动卡（4600）数据 profile —— APN cmnet。autoconnect=false 同 cbnet 件
+# r80 (P3 蜂窝标准化): autoconnect 翻正回上游默认 true——单 active 槽姿态在位
+# （keeper 压制 upstream MM 双槽 bug），NM 承担 boot 数据面（mm-dial 同轮退役）。
+# r78: 移动卡（4600）数据 profile —— APN cmnet。autoconnect=true 同 cbnet 件
 # （理由见该文件头注释）。双卡切换（cell-switch）后数据面仍走 mm-dial 重拨；
 # 本 profile 供 UI 显式激活/编辑用。
 [connection]
 id=meizu-mobile-data-cmnet
 uuid=66605443-662a-462b-91f7-96f76e4d4197
 type=gsm
-autoconnect=false
+autoconnect=true
 
 [gsm]
 apn=cmnet

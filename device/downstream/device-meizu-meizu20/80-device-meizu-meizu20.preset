@@ -54,5 +54,12 @@ disable waydroid-container.service
 # r75 (2026-11-22): cell-dataup 退役（手工 DPM 链判负，一百二十终验）——数据面
 # = mm-dial（MM 拨号形态 + qmapmux0.0 铺配置）。旧装机 cell-dataup enable 残链
 # 由 tmpfiles meizu20-retire-dataup.conf 清扫。
+# r80 (2026-11-25, P3 蜂窝标准化): mm-dial boot 退役——数据面交还 NM 标准形态
+# （P2 全通：NM 自建 qmapmux0.0/表 1430/failover 晋升主表原生可用；★单 call 域
+# = NM 与 mm-dial 互斥不可并存）。unit 照 retire-pas 先例保留 ship（手工救援 +
+# cell-switch 显式 restart 仍可用）；profile autoconnect=true 接管 boot 拨号。
+# 旧装机 enable 残链由 tmpfiles meizu20-retire-mmdial.conf 清扫（r80 新增）。
 enable cell-keeper.service
-enable mm-dial.service
+# r81 (P3): boot 期 MM failed 死锁救援（mm-dial 退役带走的 [1/6]+[2/6]，数据面仍归 NM）
+enable cell-mm-rescue.service
+disable mm-dial.service
