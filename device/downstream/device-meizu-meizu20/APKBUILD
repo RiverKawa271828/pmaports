@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=81
+pkgrel=82
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -336,6 +336,12 @@ options="!check !archcheck"
 # oneshot 两件（.sh + .service）：只救 modem 状态（failed→restart MM，≤2 轮有界），
 # 不拨号不铺路——数据面仍 = NM 标准形态；preset enable；无卡重扫一次无害
 # （r75 时代每 boot 都在做）。⚠unit After 严禁 multi-user.target（pas 自环前科）。
+# r82 (2026-11-26, P3 收尾折中——用户拍板): resolved FallbackDNS vendor drop-in
+# （/usr/lib/systemd/resolved.conf.d/）——把断 WiFi 兜底 DNS 从上游默认 quad9 换成
+# 移动 carrier DNS（211.139.5.27/28，bearer 实录）+ AliDNS 223.5.5.5（carrier
+# 中立）。补偿 carrier DNS 不落 resolved 的 NM push 缺口（r81 验收注记）；
+# FallbackDNS 仅在所有口无 DNS 时启用（WiFi 在 = 沉默），不改日常解析路径。
+# 根治仍挂 NM upstream 候补。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -436,6 +442,7 @@ makedepends="devicepkg-dev"
 	mm-dial.service
 	cell-mm-rescue.sh
 	cell-mm-rescue.service
+	meizu20-resolved-fallback.conf
 	cell-keeper.service
 	10-unlimited-retry.conf
 	meizu20-tftp-root.conf
@@ -666,6 +673,9 @@ package() {
 		"$pkgdir"/usr/lib/meizu20/cell-mm-rescue.sh
 	install -Dm644 "$srcdir/cell-mm-rescue.service" \
 		"$pkgdir"/usr/lib/systemd/system/cell-mm-rescue.service
+	# r82: resolved FallbackDNS compromise for the carrier-DNS push gap (r81 note)
+	install -Dm644 "$srcdir/meizu20-resolved-fallback.conf" \
+		"$pkgdir"/usr/lib/systemd/resolved.conf.d/meizu20-fallback-dns.conf
 	install -Dm755 "$srcdir/cell-switch.sh" \
 		"$pkgdir"/usr/bin/cell-switch.sh
 	for u in cell-keeper mm-dial; do
@@ -763,6 +773,7 @@ dbf2d1c1ee587d39a6b7cf63233a587ad99341596735c6db4a8eda647c23e9ca9c0b7997e8ef5c7d
 d1835c1db6fa1d8c5e963edbc7921a4987268e9785a6c314917463b2a3da30fb7634068d8a4b408169d08ae67b20e9f362030e3c4527809174b2834dbbb2e5a3  mm-dial.service
 5c42859a07a293a8074477767043022bd1025df4568cd397a56cfa0f4a7f7cd01d39f5e7f5355992628c01fa1ec689dc9157a9ea78b197d8bdad736863d8cd21  cell-mm-rescue.sh
 0be6a7f2178c131c435917cdde2535e0f22aa40e2ce4d7d6891665e8d036393decd03728efd141ff77f1d864d472d1f1605356cb3586cc3ea0c38483598ad019  cell-mm-rescue.service
+e5f0783b40cb7d304ff3da2ed5f7f9a658029c2c0a91976ad08fe9b9447b0c022aba174707f5cb6da9b137a7b60aefc112face4902ddeafc22ee73fb13cacb84  meizu20-resolved-fallback.conf
 ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
 d2d7ab5a091bb2bac791497d462e6a9ea01f5a335c37becf77a50849c4d20885e7cfda86544a2047d6a995370c0e496ec8188dfcd73f6913068a3159ff557de1  10-unlimited-retry.conf
 877a424cd96715ee647c0324755c66a72068a9293f549303e37d1f907fdf6c0ff35e98691a847823481a605e534d93e61dc8086160de3b1cc6716aa91ae31704  meizu20-tftp-root.conf
