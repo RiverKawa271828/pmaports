@@ -1,4 +1,9 @@
 [Unit]
+# r84: hold graphical (desktop) until the input/audio hardware chain is
+# ready - desktop must not appear before touch/audio are up.
+# (user verdict, round 124: the multi-user-tail glue chain used to race
+#  the accel-barrier chain, desktop first, touch later.)
+Before=graphical.target
 Description=Meizu 20 amps: selective geni-i2c load (i2c10/888000, CS35L45 x2; 880000.i2c lethal)
 # Autoprobe race family (see meizu-touch.service): every service that
 # toggles the global drivers_autoprobe must serialize. Chain:

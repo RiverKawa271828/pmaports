@@ -1,4 +1,9 @@
 [Unit]
+# r84: hold graphical (desktop) until the input/audio hardware chain is
+# ready - desktop must not appear before touch/audio are up.
+# (user verdict, round 124: the multi-user-tail glue chain used to race
+#  the accel-barrier chain, desktop first, touch later.)
+Before=graphical.target
 Description=Meizu 20 audio chain: ordered WCD9385 SWR + macro bring-up
 # Autoload is unreliable (modules load but never probe); see
 # meizu-audio-load.sh for the 2026-10-01 findings. Serialize on the
