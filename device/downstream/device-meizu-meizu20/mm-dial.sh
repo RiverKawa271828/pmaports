@@ -72,14 +72,23 @@ done
 ip link show qmapmux0.0 >/dev/null 2>&1 || fail "qmapmux0.0 未建（bearer 无 mux 面，查 MM bearer）"
 
 # [5/6] bearer 活体取 IPv4 配置 + 铺 addr/route（metric 700）
-BP=$(mm | grep -o "Bearer/[0-9]*" | head -1)
-[ -n "$BP" ] || fail "modem 无 bearer（connect 未落）"
-CONF=$(timeout 15 mmcli -m any -b "${BP##*/}" 2>/dev/null)
-ADDR=$(echo "$CONF" | awk '/^  IPv4 /{s=1;next} /^  [A-Z]/{s=0} s && /address:/{print $NF}' | head -1)
+# r79: BP 抓取修——modem 输出里 "initial bearer path"（Status 节，无用户面配置的
+# initial-EPS 对象）排在 Bearer 节 paths 之前，grep head -1 会抓错对象（r78 boot
+# 实证：initial=Bearer/1 vs 数据 bearer=Bearer/0 ⇒ -b 1 永远无 IPv4 = 三连 FAIL）。
+# 改 = 遍历全部 bearer 引用，取「connected: yes 且带 IPv4 address」的那个。
+CONF=""
+ADDR=""
+for CAND in $(mm | grep -o "/org/freedesktop/ModemManager1/Bearer/[0-9]*" | sort -u); do
+	C=$(timeout 15 mmcli -m any -b "${CAND##*/}" 2>/dev/null)
+	A=$(echo "$C" | awk '/^  IPv4 /{s=1;next} /^  [A-Z]/{s=0} s && /address:/{print $NF}' | head -1)
+	if echo "$C" | grep -q "connected: yes" && [ -n "$A" ]; then
+		CONF="$C"; ADDR="$A"; break
+	fi
+done
+[ -n "$CONF" ] || fail "无已连接带 IPv4 的 bearer（查 MM bearer 详情）"
 PFX=$(echo "$CONF" | awk '/^  IPv4 /{s=1;next} /^  [A-Z]/{s=0} s && /prefix:/{print $NF}' | head -1)
 GW=$(echo "$CONF" | awk '/^  IPv4 /{s=1;next} /^  [A-Z]/{s=0} s && /gateway:/{print $NF}' | head -1)
 DNS=$(echo "$CONF" | awk '/^  IPv4 /{s=1;next} /^  [A-Z]/{s=0} s && /dns:/{sub(/.*dns: */,""); print}' | head -1)
-[ -n "$ADDR" ] || fail "bearer 无 IPv4 地址（查 MM bearer 详情）"
 [ -n "$PFX" ] || PFX=32
 sysctl -w net.ipv6.conf.rmnet_ipa0.disable_ipv6=1 >/dev/null 2>&1
 # r70 律：先 flush 再 replace——回现值/旧地址并存时 -I 源选择踩旧 context = 假阴性

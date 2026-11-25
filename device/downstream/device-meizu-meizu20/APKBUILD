@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=78
+pkgrel=79
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -306,6 +306,15 @@ options="!check !archcheck"
 # ⚠部署：机上 11-22 手工件 /etc/NetworkManager/system-connections/
 # meizu-mobile-data.nmconnection（无 autoconnect 行=默认 true）须先删再装包，
 # 否则 apk 撞 untracked 文件；包内同名 profile 替代之（uuid 已固定）。
+# r79 (2026-11-25, r78 轮实测副产物): mm-dial.sh [5/6] BP 抓取修——modem 输出
+# "initial bearer path"（Status 节的 initial-EPS 对象，无用户面配置）排在 Bearer
+# 节 paths 之前，grep -o | head -1 抓错对象（r78 boot 实证：initial=Bearer/1 vs
+# 数据 bearer=Bearer/0 ⇒ -b 1 无 IPv4 = 三连 FAIL 数据面死）。改 = 遍历全部
+# bearer 引用取「connected: yes 且带 IPv4」者。触发语境 = MM restart/NM 冲突
+# 搅动后的 bearer 编号漂移；fresh boot 未必复现，但抓取法本身脆弱必修。
+# ★同轮并存定谳：本平台 IPA 路径 = 单 call 域——mm-dial 占线时 NM 激活
+# （cmnet）= call-already-present 冲突且 MM 断开流程把旧 bearer 带走（双死），
+# NM 与 mm-dial 互斥不可并存；P3 取舍从「可能」变「确定」（详见 nura 执行卡）。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -721,7 +730,7 @@ b06304c50969b0a3e9151b07413c9ae625a40de1e9ab3460a0acc0778bd1059d64648f3007dc080c
 7cd347f812d8d860e9db814a305f142edf003d0ca18029daa50f5d38cd084a272165bc20a28191e1cf8156fb82f6e5838f53229a23d63edc41e7285bbb92d98c  52_waydroid.nft
 db01bd2824ccd259a0f5abf3c6476c20e702d20e2d726e64dd4138e97801567ae8dfbd3eaec791565ce140097083c0fc35bdce6a05301dcca6d46c8acd55a990  cell-keeper.sh
 14abc051edc6b908d8b149801beb3cca8bea2b193e497933a464df96706acc3aa9352816829b021c6c73fa25b9b24e6ee4ef67bc7714622c3c4f75b0d3bdf3c6  cell-switch.sh
-ee9eee01e53c22ab89e39ff9df2f6f06ac5981b6d7c5187551da3c81dc68aadcb3feb5efa068c4d7d1cf12bba222ef7f328c334178464ab15c5d08cec72acfd7  mm-dial.sh
+dbf2d1c1ee587d39a6b7cf63233a587ad99341596735c6db4a8eda647c23e9ca9c0b7997e8ef5c7d0a2f576e8e1be3c9908783557efea0b9ba1527a83e12725a  mm-dial.sh
 d1835c1db6fa1d8c5e963edbc7921a4987268e9785a6c314917463b2a3da30fb7634068d8a4b408169d08ae67b20e9f362030e3c4527809174b2834dbbb2e5a3  mm-dial.service
 ce94bef84bd129f01227649d42cf5553f46beb2aabc036adfad85e56c92d4b6b4a410c02fd374a0db3386bb3dbefce1c1de810717312ad87767a8f11d1055211  cell-keeper.service
 d2d7ab5a091bb2bac791497d462e6a9ea01f5a335c37becf77a50849c4d20885e7cfda86544a2047d6a995370c0e496ec8188dfcd73f6913068a3159ff557de1  10-unlimited-retry.conf
