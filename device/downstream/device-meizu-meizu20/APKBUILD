@@ -29,7 +29,7 @@ pkgrel=83
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
-options="!check !archcheck"
+options="!check !archcheck !pmb:crossdirect"
 # usb-moded: re-binds the configfs USB gadget on cable replug/udev events.
 # The initramfs only sets the gadget up once per boot; without usb-moded a
 # physical replug left usb0 dead until a cold boot (observed 2026-09-27).

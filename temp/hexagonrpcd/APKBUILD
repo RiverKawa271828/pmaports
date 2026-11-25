@@ -30,6 +30,7 @@
 # physical file = <sensorspd -R root>/mnt/vendor/persist/sensors/
 # registry/temp.json, provisioned by device package tmpfiles (r83).
 # Rollback on device: apk add hexagonrpcd==0.4.0-r3 (Alpine repos).
+options="!pmb:crossdirect"
 maintainer="ri <ri@example.com>"
 pkgname=hexagonrpcd
 pkgver=0.4.0
