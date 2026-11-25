@@ -20,11 +20,20 @@
 # ADSP, no SLPI remoteproc on kalama).
 # Upstream candidate: linux-msm/hexagonrpc; local tree = meizu20/
 # hexagonrpc-upstream (branch meizu20-audiopd).
+# r9 (2026-11-26, temp.json 根治轮): 0006 = narrow write support for the
+# sensor registry temp.json scratch file. Upstream refuses every
+# open-for-writing at the apps_std layer (AEE_EUNSUPPORTED), so the
+# sensor PD burns ~980 open retries per boot (journal spam; 2026-11-20
+# r69 tmpfiles-path fix was unreachable - the refusal precedes any path
+# resolution). 0006: writable mapped dirent variant + FWRITE (method 5)
+# + temp.json mapped into the persist/sensors/registry virtual dir;
+# physical file = <sensorspd -R root>/mnt/vendor/persist/sensors/
+# registry/temp.json, provisioned by device package tmpfiles (r83).
 # Rollback on device: apk add hexagonrpcd==0.4.0-r3 (Alpine repos).
 maintainer="ri <ri@example.com>"
 pkgname=hexagonrpcd
 pkgver=0.4.0
-pkgrel=8
+pkgrel=9
 pkgdesc="Qualcomm HexagonFS daemon"
 url="https://github.com/linux-msm/hexagonrpc"
 # s390x: fails on 1 test. Hexagonrpcd is specific to Qualcomm ARM SoCs, so let's ignore it for now.
@@ -46,6 +55,7 @@ subpackages="$pkgname-doc $pkgname-openrc $pkgname-systemd $pkgname-udev"
 	0003-hexagonrpcd-serve-static-PD-sessions-in-the-official.patch
 	0004-hexagonrpcd-expose-the-SSC-registry-version-sibling.patch
 	0005-hexagonrpcd-add-a-narrow-sns_registry-property-shim.patch
+	0006-hexagonrpcd-serve-the-sensor-registry-tempjson-for-writing.patch
 	"
 builddir="$srcdir/hexagonrpc-$pkgver"
 
