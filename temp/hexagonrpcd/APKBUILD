@@ -20,21 +20,11 @@
 # ADSP, no SLPI remoteproc on kalama).
 # Upstream candidate: linux-msm/hexagonrpc; local tree = meizu20/
 # hexagonrpc-upstream (branch meizu20-audiopd).
-# r9 (2026-11-26, temp.json 根治轮): 0006 = narrow write support for the
-# sensor registry temp.json scratch file. Upstream refuses every
-# open-for-writing at the apps_std layer (AEE_EUNSUPPORTED), so the
-# sensor PD burns ~980 open retries per boot (journal spam; 2026-11-20
-# r69 tmpfiles-path fix was unreachable - the refusal precedes any path
-# resolution). 0006: writable mapped dirent variant + FWRITE (method 5)
-# + temp.json mapped into the persist/sensors/registry virtual dir;
-# physical file = <sensorspd -R root>/mnt/vendor/persist/sensors/
-# registry/temp.json, provisioned by device package tmpfiles (r83).
 # Rollback on device: apk add hexagonrpcd==0.4.0-r3 (Alpine repos).
-options="!pmb:crossdirect"
 maintainer="ri <ri@example.com>"
 pkgname=hexagonrpcd
 pkgver=0.4.0
-pkgrel=9
+pkgrel=8
 pkgdesc="Qualcomm HexagonFS daemon"
 url="https://github.com/linux-msm/hexagonrpc"
 # s390x: fails on 1 test. Hexagonrpcd is specific to Qualcomm ARM SoCs, so let's ignore it for now.
@@ -56,7 +46,6 @@ subpackages="$pkgname-doc $pkgname-openrc $pkgname-systemd $pkgname-udev"
 	0003-hexagonrpcd-serve-static-PD-sessions-in-the-official.patch
 	0004-hexagonrpcd-expose-the-SSC-registry-version-sibling.patch
 	0005-hexagonrpcd-add-a-narrow-sns_registry-property-shim.patch
-	0006-hexagonrpcd-serve-the-sensor-registry-tempjson-for-writing.patch
 	"
 builddir="$srcdir/hexagonrpc-$pkgver"
 
@@ -98,5 +87,4 @@ e1311270af2109f8124f7f32040aae0bb509785b168c516dbbeaac5b6875c597768ab2c08e62ec54
 9bc37ec20fd9c970b108ea3e9b9e108e247f4b54b6a676069c70884ada462785c4d495198629471ee8eeb32fff9eaa7d33fe1928260cfcca2e0e7fb7f4f01310  0003-hexagonrpcd-serve-static-PD-sessions-in-the-official.patch
 3ef33c96ff18c39b6f5d2828484f10d447b2d92d8c4334e05fb4249b0d5221c1cf7883b4b4dfb5d42eabd07856a614ec9b0ccbc4cdddb48bcb90e4602eaf8a9d  0004-hexagonrpcd-expose-the-SSC-registry-version-sibling.patch
 e059b492400e4f9b7306574372c6239dbbb4c8f15777bfb99b536411f19a0744d56938dbf75309146625ae07e3b9d2aae6e561bc331a33b96020f487cd3b443b  0005-hexagonrpcd-add-a-narrow-sns_registry-property-shim.patch
-6faff1f27929c27227f88959b039424da41701d495ed5798203dce719537894a0a75144d33bc7e9926cb9b02a2dca495c5df249a26125aa9ac0633049e1f36e9  0006-hexagonrpcd-serve-the-sensor-registry-tempjson-for-writing.patch
 "
