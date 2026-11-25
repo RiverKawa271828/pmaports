@@ -1,0 +1,22 @@
+# r78: 广电卡（460-15）数据 profile —— APN cbnet（一百二十终验真值）。
+# autoconnect 必须 false：true 会让 NM 在 boot 时自动拨号，重蹈"NM auto-enable
+# = MM 双 active 槽循环加速器"（一百零四/一百零五实锤），并与 mm-dial/keeper
+# 自动化链抢链路。boot 数据面归 mm-dial/keeper；本文件只让 plasma-nm UI
+# （快速设置"移动数据"开关 + kcm_cellular_network）能看见设备与 APN。
+[connection]
+id=meizu-mobile-data
+uuid=30e37ba8-54b4-4df5-953d-9570be1d05c8
+type=gsm
+autoconnect=false
+
+[gsm]
+apn=cbnet
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=default
+method=disabled
+
+[proxy]

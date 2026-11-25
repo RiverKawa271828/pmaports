@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=77
+pkgrel=78
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -294,6 +294,18 @@ options="!check !archcheck"
 # ESC[31mfailed[0m）= 比较永假依旧走错分支；mm() 统一剥码 + state 锚定改
 # ".*| *state:"（state 在 Status 头行上，前有 Status 文本；power state 不匹配）。
 # 设备直验：解析输出干净 "failed" ✓。
+# r78 (2026-11-25, 蜂窝 UI 开关轮[无卡限定]): plasma-nm 的 CellularModem（快速
+# 设置"移动数据"开关 + kcm_cellular_network）要求 NM 存在与 MM modem 对应的
+# ModemDevice；qrtr0 在 r75 unmanaged 名单里 ⇒ m_nmModem=null ⇒ 开关死（点击只
+# 跳设置页）+ "APN 未配置"（11-25 用户报，源码级取证 libs/cellular/cellularmodem.cpp）。
+# ① 00-nura-qrtr-unmanaged.conf 摘出 qrtr0（rmnet_ipa0/rmnet0/qmapmux* 照旧隔离）；
+# ② 两枚 gsm profile 入包（cbnet=广电真值 / cmnet=移动），均 autoconnect=false
+#    ——true 会让 NM 开机自动拨号，重蹈一百零四"NM auto-enable = 双 active 漂移
+#    循环加速器"，并与 mm-dial/keeper 抢链路；boot 数据面仍归 mm-dial/keeper，
+#    本轮只让 UI 看见设备与 APN（有卡窗口再验开关 On/Off 三分支）。
+# ⚠部署：机上 11-22 手工件 /etc/NetworkManager/system-connections/
+# meizu-mobile-data.nmconnection（无 autoconnect 行=默认 true）须先删再装包，
+# 否则 apk 撞 untracked 文件；包内同名 profile 替代之（uuid 已固定）。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -400,6 +412,8 @@ makedepends="devicepkg-dev"
 	meizu20-dma-heap.conf
 	meizu20-sensors-tempjson.conf
 	00-nura-qrtr-unmanaged.conf
+	meizu-mobile-data-cbnet.nmconnection
+	meizu-mobile-data-cmnet.nmconnection
 "
 
 build() {
@@ -625,6 +639,13 @@ package() {
 		"$pkgdir"/usr/lib/systemd/system/rmtfs.service.d/10-unlimited-retry.conf
 	install -Dm644 "$srcdir/00-nura-qrtr-unmanaged.conf" \
 		"$pkgdir"/usr/lib/NetworkManager/conf.d/00-nura-qrtr-unmanaged.conf
+	# r78: gsm profiles for the plasma-nm cellular UI (quicksettings toggle +
+	# kcm_cellular_network). NM refuses keyfiles wider than 0600; autoconnect
+	# is false in both files (see the r78 note above for why).
+	for nmprof in meizu-mobile-data-cbnet meizu-mobile-data-cmnet; do
+		install -Dm600 "$srcdir/$nmprof.nmconnection" \
+			"$pkgdir"/etc/NetworkManager/system-connections/$nmprof.nmconnection
+	done
 	# r69: tmpfiles 三件（TFTP 根持久化 / meizu-pas 退役清扫 / temp.json 可写
 	# 路径，详见 r69 注记）。
 	for t in meizu20-tftp-root meizu20-retire-pas meizu20-retire-dataup meizu20-sensors-tempjson; do
@@ -709,5 +730,7 @@ d987fd43595210047d4f9143e33b6b3f08cef572369afbbc1be309108e140a15946210e43332a2a1
 9b0cd1184f870dce3de5970dd474f1ef1d716939c569bd58c673d6bae74870032c10b84c0b698f85d6500c520376ea90b74f2944f7dbc7b26f46834035823f28  meizu20-retire-dataup.conf
 82c4ece11598800068fe902cfd04bd9ab7c5ea9146a623fc0fe7bfd914e47c8ff15a026302d34e8d6976b952d732c7d6cac242a82597e624bca9e007291ff6ea  meizu20-dma-heap.conf
 4e18e951b87c0bca73c18d210aef8154d0cfcc47ab0241604d0a37a0618e46cca027f8c5edceccbc64be3853f534488224fc95b7e1d5189954b3e695eadb25de  meizu20-sensors-tempjson.conf
-fd7dd94f59b54a1efd6c17e23f09ecf5c6650ef93c940c95582c92ee01e91f32a773c9f275c4bd04afc6cf54365f4206c9ee82f5e54e39682e21b41a924ba781  00-nura-qrtr-unmanaged.conf
+2a19289ecec6ef5c6f7de694b96bcc2664d09cae9597daf8f08446bdf9f83d4e4e5b28bcd073b0f42f55ad64cad397244d00da42758bf0c54c05dec4bbe07eda  00-nura-qrtr-unmanaged.conf
+dc03c924bb38a484f046600767ca4eb04a46f5ccca8332f0245410692ad73b01226ae6273911d2b13a9880eba0e617074f8fe6f81c609db70852c2da44e6d09c  meizu-mobile-data-cbnet.nmconnection
+c8335752c10620ee5caea381d9d584ec0f94dcfe736a62dd78999264f0979f67a333a47dad6e79c4854d13408f6be76652ad9104223d86c126d6e831ca065e79  meizu-mobile-data-cmnet.nmconnection
 "
