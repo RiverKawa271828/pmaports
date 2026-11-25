@@ -1,10 +1,8 @@
 # r80 (P3 蜂窝标准化): autoconnect 翻正回上游默认 true——单 active 槽姿态在位
 # （keeper 压制 upstream MM 双槽 bug），NM 承担 boot 数据面（mm-dial 同轮退役）。
 # r78: 广电卡（460-15）数据 profile —— APN cbnet（一百二十终验真值）。
-# autoconnect 必须 false：true 会让 NM 在 boot 时自动拨号，重蹈"NM auto-enable
-# = MM 双 active 槽循环加速器"（一百零四/一百零五实锤），并与 mm-dial/keeper
-# 自动化链抢链路。boot 数据面归 mm-dial/keeper；本文件只让 plasma-nm UI
-# （快速设置"移动数据"开关 + kcm_cellular_network）能看见设备与 APN。
+# r83: dns-search=cellular 同 cmnet 件（carrier DNS 上 resolved link 的门钥匙，
+# 理由见该文件头 r83 注记）。
 [connection]
 id=meizu-mobile-data
 uuid=30e37ba8-54b4-4df5-953d-9570be1d05c8
@@ -15,6 +13,7 @@ autoconnect=true
 apn=cbnet
 
 [ipv4]
+dns-search=cellular
 method=auto
 
 [ipv6]

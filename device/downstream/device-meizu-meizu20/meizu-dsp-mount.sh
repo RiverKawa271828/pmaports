@@ -10,6 +10,12 @@
 # (ext4), never written from pmOS. Slot comes from qbootctl (GPT
 # attributes, not cmdline - our kernel bakes a fixed cmdline); b is the
 # pmOS slot and the fallback.
+#
+# r83: bounded retry for the boot-early timing hazard (2026-11-20 plasma
+# round: on some boots the by-partlabel symlink is not populated yet
+# when the unit runs; manual restart heals). Wait for the device node in
+# the script instead of a systemd Restart= - an unlimited-retry oneshot
+# sitting in the boot path is the r66 multi-user deadlock shape.
 
 slot="$(/usr/bin/qbootctl -c 2>/dev/null | awk '{print $NF}')"
 case "$slot" in
@@ -21,6 +27,12 @@ dev="/dev/disk/by-partlabel/dsp_$slot"
 if [ ! -b "$dev" ]; then
 	dev="/dev/disk/by-partlabel/dsp_b"
 fi
+
+n=0
+while [ ! -b "$dev" ] && [ "$n" -lt 10 ]; do
+	n=$((n + 1))
+	sleep 1
+done
 
 if [ ! -b "$dev" ]; then
 	echo "meizu-dsp-mount: no dsp partition found" >&2

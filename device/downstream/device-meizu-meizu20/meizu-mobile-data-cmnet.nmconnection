@@ -3,6 +3,12 @@
 # r78: 移动卡（4600）数据 profile —— APN cmnet。autoconnect=true 同 cbnet 件
 # （理由见该文件头注释）。双卡切换（cell-switch）后数据面仍走 mm-dial 重拨；
 # 本 profile 供 UI 显式激活/编辑用。
+# r83: dns-search=cellular —— carrier DNS 上 resolved link 的门钥匙（一百二十四
+# 轮定谳）：NM resolved 插件对「无 search domain 且未赢得 ~ 默认路由竞选」的
+# 条目整条丢弃（update_add_ip_config 早退），WiFi 共存语境下 modem link 恒零
+# DNS，只能吃 r82 FallbackDNS。给一个 search domain 即过门：carrier DNS 上链
+# （2026-11-26 实弹验证），WiFi 掉线时 failover 亦有 link DNS。DNS-only，不影响
+# 路由面。
 [connection]
 id=meizu-mobile-data-cmnet
 uuid=66605443-662a-462b-91f7-96f76e4d4197
@@ -13,6 +19,7 @@ autoconnect=true
 apn=cmnet
 
 [ipv4]
+dns-search=cellular
 method=auto
 
 [ipv6]

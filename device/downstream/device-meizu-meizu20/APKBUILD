@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=82
+pkgrel=83
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -695,7 +695,8 @@ package() {
 			"$pkgdir"/etc/NetworkManager/system-connections/$nmprof.nmconnection
 	done
 	# r69: tmpfiles 三件（TFTP 根持久化 / meizu-pas 退役清扫 / temp.json 可写
-	# 路径，详见 r69 注记）。
+	# 路径，详见 r69 注记）；r83: tempjson conf 根治版（路径挪 -R 根 + fastrpc
+	# 属主，配 hexagonrpcd r9 0006 写支持，详见 conf 头注）。
 	for t in meizu20-tftp-root meizu20-retire-pas meizu20-retire-dataup meizu20-retire-mmdial meizu20-sensors-tempjson; do
 		install -Dm644 "$srcdir/$t.conf" \
 			"$pkgdir"/usr/lib/tmpfiles.d/$t.conf
@@ -737,7 +738,7 @@ aef03c236f25dd9fe445bd7ad0f17e3ef08ce5a2ae1d8e96e60c54c645c23e7ca7ab4850f19db667
 2460cc1105306e6c058c4fada082b6942176ce00da00e1db197e997e9e7ef36901dd88ace9a8c0057c98ee7d92049e878bc94da086001394758a8925da18d853  10-meizu-journald-sync.conf
 b7db62b317a1fb0cf2010358ece27b9da5763a9f62e455c9582abb177aef5bf60025b437f8a7df3f7906d83bdb169803c6f8bd7e5beea570f44a295bf676d9fa  meizu-grow-rootfs.service
 d8e490072aa3f10e1493f0ea0ea0f7c260d6fd644c258151203a8153633068a048db7d1db8a14755155f98acafba5d9e7da298f05528aa4a26e30ebfe4930b91  meizu-dsp-mount.service
-efdd3a0dce1a80d6b58a2d3d023ed810b4c81dada573f8a642f18a08c2772df55cc459d0b84f96b7efde062733a5e3376b12616125eb825b6db64916143e0241  meizu-dsp-mount.sh
+4b739042531fcefd6fcf7f7520157414d4f264495e72d3dc3e7a2cf657ec198a03c21ce11bb8358aba4d1cd696e70d6125511ffd7fb311374ca5caff4ddc5fe6  meizu-dsp-mount.sh
 1b110900f88d609d8e555102c653bb21948149db6c9d07547b8d5e4de1f4ece4204ae5c85a027f6654a9b72ccddbc5668183c7845cb95c7dd74030397788dfc7  devshell.service
 23425b29f58ff9dec964d38621ba9151d428e1d6ed581505e46a5049e938eda8efc465d49db7eb60017ace7de4f8a48ef5e662acd672f77bbc77d17b11056922  MEIZU20.conf
 c9854145566ef709850d1c9c92282a727ed44ce2ff9b1d35f734653d40d681c281e91302a6fbe6b03b9e973b72c5c5767ee303e9ac2ff8641b7ee1e9dfdb1a7f  HiFi.conf
@@ -781,8 +782,8 @@ d987fd43595210047d4f9143e33b6b3f08cef572369afbbc1be309108e140a15946210e43332a2a1
 9b0cd1184f870dce3de5970dd474f1ef1d716939c569bd58c673d6bae74870032c10b84c0b698f85d6500c520376ea90b74f2944f7dbc7b26f46834035823f28  meizu20-retire-dataup.conf
 55843c5acbfa966b80eebd09436d2a3e8537d70f354db967e4b7ca335068ac708314bbcf4f2765f3b50726f6e2e0de610c8339dd48b4133bc8c5f4e65dd025ed  meizu20-retire-mmdial.conf
 82c4ece11598800068fe902cfd04bd9ab7c5ea9146a623fc0fe7bfd914e47c8ff15a026302d34e8d6976b952d732c7d6cac242a82597e624bca9e007291ff6ea  meizu20-dma-heap.conf
-4e18e951b87c0bca73c18d210aef8154d0cfcc47ab0241604d0a37a0618e46cca027f8c5edceccbc64be3853f534488224fc95b7e1d5189954b3e695eadb25de  meizu20-sensors-tempjson.conf
+93733153b93ad2d1149f26841978e38360189a29565899d24c578e91e99192d99c0add9a25697ce32db418c8bb1269db1f19c7a1f6c736da215be0f5b174abc5  meizu20-sensors-tempjson.conf
 2a19289ecec6ef5c6f7de694b96bcc2664d09cae9597daf8f08446bdf9f83d4e4e5b28bcd073b0f42f55ad64cad397244d00da42758bf0c54c05dec4bbe07eda  00-nura-qrtr-unmanaged.conf
-9aebfd157f42372c1a67abb9885a757c0bab50dc347f8ea7302983c6f69756a568f8433877bd6f3d0012c9fa0c1f9f56da89e7ffbd421140a2e6875f06aff3da  meizu-mobile-data-cbnet.nmconnection
-af925c188cd343aec550a531e20c67a009969a7d4e773661d13d841f917a503b611faec1cce976d3c2ef8a4939c5c62cba79fc6093f408f7eeb0758090ba70c2  meizu-mobile-data-cmnet.nmconnection
+7702f75e6a88b9b35c2baf258b9e662b92cda5e19fca8cc8d0f71452527ea1ef0729964ba565bf28403159bf17fe104875c2600c35ee92e7370354b20df73958  meizu-mobile-data-cbnet.nmconnection
+b5669206e6fea637c770351e8f2de2e9325a5541fab86e9f2f314118b8fef3dbfc266f3e78ea9c1d11be1740baa1e6958c91543ba4e91553dfa653eb7e2caf5a  meizu-mobile-data-cmnet.nmconnection
 "
