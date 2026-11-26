@@ -34,4 +34,14 @@ while [ $N -lt 20 ]; do
 	N=$((N+1))
 	sleep 1
 done
-[ -e /sys/bus/i2c/devices/0-002d/driver ] || echo 0-002d > /sys/bus/i2c/drivers/s5k3p9sx/bind 2>/dev/null
+# r87 修订（2026-11-27 二段）：传感器 retrigger 地址不可硬编码 —— cci 子总线
+# 的内核编号跨 boot 漂移（同日两 boot 实证：05:13 boot = 2-002d，05:55 boot =
+# 0-002d）。绑定的主机制 = deferred probe 在 vdda（pm8008j）注册后自动重试
+# 自愈（13.8s deferred → 54.5s 轨注册 → 绑定实证）；此处 retrigger 只是补枪，
+# 按模式对所有 *-002d 未绑实例各补一发，段尾显式 exit 0 —— 补枪失的不再把
+# oneshot 拉成假 failed（此前退出码恒 1 = failed 计数噪声源）。
+for D in /sys/bus/i2c/devices/*-002d; do
+	[ -e "$D" ] || continue
+	[ -e "$D/driver" ] || echo "$(basename "$D")" > /sys/bus/i2c/drivers/s5k3p9sx/bind 2>/dev/null
+done
+exit 0

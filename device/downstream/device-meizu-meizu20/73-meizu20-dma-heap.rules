@@ -1,0 +1,10 @@
+# Meizu 20 (device pkg r87, 2026-11-27): grant the video group access to the
+# dma_heap exporter nodes. Upstream (systemd 262) ships no rule for
+# SUBSYSTEM=="dma_heap", so the nodes stay 0600 root:root and every
+# session-user libcamera client dies in DmaBufAllocator ("Could not open any
+# dma-buf provider") -> SoftwareIsp disabled -> plasma-camera exits at
+# startup. This mirrors the video4linux GROUP="video" convention already
+# applied by 50-udev-default.rules; the default user is in the video group.
+# The heap-order choice (system vs CMA) is libcamera's business (see
+# temp/libcamera 0003 patch); this only opens the doors.
+SUBSYSTEM=="dma_heap", GROUP="video", MODE="0660"
