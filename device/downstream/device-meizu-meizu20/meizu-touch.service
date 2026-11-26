@@ -4,6 +4,7 @@
 # (user verdict, round 124: the multi-user-tail glue chain used to race
 #  the accel-barrier chain, desktop first, touch later.)
 Before=graphical.target
+Before=plasma-mobile.service
 Description=Meizu 20 touch: selective geni-i2c load (touch SE only; 880000.i2c lethal)
 After=multi-user.target
 # r22 定案（2026-09-29）: PAS 与本服务并发操作同一全局 drivers_autoprobe 开关。

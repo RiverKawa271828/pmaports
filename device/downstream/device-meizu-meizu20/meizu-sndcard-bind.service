@@ -4,6 +4,7 @@
 # (user verdict, round 124: the multi-user-tail glue chain used to race
 #  the accel-barrier chain, desktop first, touch later.)
 Before=graphical.target
+Before=plasma-mobile.service
 Description=Meizu 20 sndcard: attach pinctrl/va/machine until card0 exists
 # r48 (2026-10-07): rewrite as a verify-retry loop (meizu-sndcard-bind.sh).
 # The r47 one-shot kicks (autoprobe=1 + three drivers_probe writes) were

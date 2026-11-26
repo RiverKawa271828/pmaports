@@ -13,6 +13,7 @@ Description=Meizu 20 accel-ready barrier before the plasma session
 # claim is a populated proxy. Timeout is non-fatal: plasma starts
 # anyway, worst case = the pre-existing missing-tile behaviour.
 After=meizu-sensors-ready.service
+Before=plasma-mobile.service
 
 [Service]
 Type=oneshot
