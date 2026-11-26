@@ -1,9 +1,9 @@
 # Forked from Alpine for temporary downstream patches
 maintainer="Robert Mader <robert.mader@collabora.com>"
 pkgname=libcamera
-_pkgver=0.7.2
+_pkgver=0.8.0
 pkgver=9999$_pkgver
-pkgrel=3
+pkgrel=2
 pkgdesc="Linux camera framework"
 url="https://libcamera.org/"
 arch="all"
@@ -38,12 +38,13 @@ makedepends="
 subpackages="
 	$pkgname-dbg
 	$pkgname-dev
-	qcam
 	$pkgname-gstreamer
-	$pkgname-v4l2
+	$pkgname-ipa
 	$pkgname-tools
+	$pkgname-v4l2
 	py3-$pkgname-pyc:pyc
 	py3-$pkgname:py3
+	qcam
 	"
 _tuning_files="
 	hi846.yaml
@@ -58,14 +59,9 @@ _tuning_files="
 	s5kjn1.yaml
 	"
 source="https://gitlab.freedesktop.org/camera/libcamera/-/archive/v$_pkgver/libcamera-v$_pkgver.tar.gz
-	0001-libcamera-simple-Enable-softISP-for-the-Pinephone.patch
-	0002-libcamera-simple-Skip-hwISP-formats-if-swISP-is-acti.patch
-	0003-software_isp-debayer_egl-Re-add-log-for-failing-DMAB.patch
-	0004-ipa-simple-Derive-AGC-minimum-gain-step-from-sensor-.patch
-	0005-debayer-Further-demote-Unsupported-input-format-log.patch
-	0006-debayer_egl-Use-untransposed-matrix-to-fix-GLES-2.0.patch
-	0007-simple-Limit-swISP-output-sizes.patch
-	0008-libcamera-Add-quad-Bayer-CFA-layout-support.patch
+	0001-libcamera-software_isp-Allow-limiting-output-sizes.patch
+	0002-libcamera-Add-quad-Bayer-CFA-layout-support.patch
+	0003-dma_buf_allocator-Prefer-system-heap-before-CMA.patch
 	qcam.desktop
 	$_tuning_files
 	"
@@ -76,23 +72,13 @@ options="!strip !check"
 
 case "$CARCH" in
 arm*|aarch64)
-	subpackages="$subpackages $pkgname-raspberrypi"
-	;;
-esac
-
-case "$CARCH" in
-ppc64le|s390x|riscv64|loongarch64)
-	# doesn't install any ipa
-	;;
-*)
-	depends="$pkgname-ipa=$pkgver-r$pkgrel"
-	subpackages="$subpackages $pkgname-ipa"
+	# must be ordered before the ipa subpackage
+	subpackages="$pkgname-raspberrypi $subpackages"
 	;;
 esac
 
 build() {
 	abuild-meson \
-		-Dpipelines=auto,virtual \
 		-Dv4l2=true \
 		-Dwerror=false \
 		-Ddocumentation=disabled \
@@ -120,14 +106,11 @@ package() {
 }
 
 ipa() {
-	depends=""
-	amove usr/lib/libcamera
-	amove usr/share/libcamera/ipa
+	depends="$pkgname=$pkgver-r$pkgrel"
+	install_if="$pkgname=$pkgver-r$pkgrel"
 
-	for _tuning_file in $_tuning_files; do
-		install -Dm644 -t "$subpkgdir"/usr/share/libcamera/ipa/simple \
-			"$srcdir"/"$_tuning_file"
-	done
+	amove usr/lib/libcamera/ipa
+	amove usr/share/libcamera/ipa
 
 	# then sign ipa's
 	local ipa
@@ -137,6 +120,11 @@ ipa() {
 			"$(find "$builddir"/output -type f -iname "*ipa-priv-key.pem")" \
 			"$ipa" \
 			"$ipa".sign
+	done
+
+	for _tuning_file in $_tuning_files; do
+		install -Dm644 -t "$subpkgdir"/usr/share/libcamera/ipa/softisp \
+			"$srcdir"/"$_tuning_file"
 	done
 }
 
@@ -179,24 +167,19 @@ py3() {
 
 
 sha512sums="
-b317cdc96f61682ee0bf26dfb7c4d6441db9a9c5b93ab53528121a8cd44862b3d59cbaa3881bb0837e3e381564c184c7b742124aef4267eea754c6083de353c1  libcamera-v0.7.2.tar.gz
-c6e4d44758bc3afa639d5dfa30113e92270094f1dca8505982e85629ff88fab890ec3f14098600bdf7498259becea4bdadbff117aa96b8bc0a043ffeb4fb2f4f  0001-libcamera-simple-Enable-softISP-for-the-Pinephone.patch
-1a84267c138192f3999b870985030b0cf9bf0b61b911481bdef73d6a377bea4159f438a21180db87c3ff97c9da9f00fb0885cfedde828f4237d0ce03196d6ed7  0002-libcamera-simple-Skip-hwISP-formats-if-swISP-is-acti.patch
-e90c6c742a594e6af2efec8b9ce7cf133ed294645840f72a07408eabc010e50192462a653ef6e43b4558c9390ac516d0eefbc606691da55e604f5d20f871a0db  0003-software_isp-debayer_egl-Re-add-log-for-failing-DMAB.patch
-6159dc60692382a712c683fa63bb131bd1d4978e1e639b90940ae5f340ac396d1f9b1abfb9b450cf29c0e484018af3f80e87cc9a4b7b4e856038bd4154bdab2c  0004-ipa-simple-Derive-AGC-minimum-gain-step-from-sensor-.patch
-de5fd287fea2c71754beb7d72a6fd739a94ec7a47ed3ea09a60130bee1c08efdcf94e12b1830914e7e498b0d80a0cb4550a614aeb899129fba9d4f06918f5c63  0005-debayer-Further-demote-Unsupported-input-format-log.patch
-875788a4571ec8485f17b0abf9681238acdf3c92a1152363d4416d68e171eb7a9231dd51b59b9f56e2815f6e81bbb33fbde5419e3b9b15e1963800ebe6eddb14  0006-debayer_egl-Use-untransposed-matrix-to-fix-GLES-2.0.patch
-ac4e3c742fde4f8e4775bd2afbaaecb18fa49b869eb4309032bae985680f97443353eb384de19a9b588b632bb1711f82c318e0431214afe09068910b2e901252  0007-simple-Limit-swISP-output-sizes.patch
-2b8ee82c974a0a54279700c70dc8973038f5e1b517cade87872319d5f0b5aa9be6df0a827a9098da3fb498238b1fe080419e9950e34def0edadca0247794f269  0008-libcamera-Add-quad-Bayer-CFA-layout-support.patch
+21ada092a1944c3476e0a254fe82d2775d2eb833d931dd051bd551a9f12ae596b3cd57f3792335d4ad86479e2247d23056d30e2631aa620897d067002c88e060  libcamera-v0.8.0.tar.gz
+e255545cdc1d3d0e68fd40c504d2c2a24ec9a89de9e26842e05cc6046cf79615be87b0b9f80a3637b1f130c0404ff5e0f7df5136334b05c1d4e24e3290738223  0001-libcamera-software_isp-Allow-limiting-output-sizes.patch
+7918e3e2eed6ea6413936c30c88b752ba7c2da568c75236b2f5740e311b7b16fc6b4cc21413f4751af252843d0b98ad45ca41033e65686a9e9cdfa8d05f467c2  0002-libcamera-Add-quad-Bayer-CFA-layout-support.patch
+	bfb884b7f01a5162da55936ad91bc35ac064d395d29c0edd3eed25e0a31cd31e1df630c206e96922c7a86e529420565ce18d9cd3ec09f4bac3a6b19db8e8e7ce  0003-dma_buf_allocator-Prefer-system-heap-before-CMA.patch
 22167a4eceb6d1b40b0b7c45fdf116c71684f5340de7f767535cb8e160ad9d2ae0f00cb3d461f73a344520a48a4641cf46226841d78bee06bfbfd2a91337f754  qcam.desktop
-2ee566653b17d565d2c0de67cbe6ebad25df5aac6051cad78e6bae52016fa2ca0247e964d735ac776b3e0bd447ead9c4fcb26cd7629228cdba3ceb91b46f378f  hi846.yaml
+926933ed5aa6bc005471d8ddbbf49afaeb5034ac776c78bcba6655adc05b68be858923aac7887f8a8451a424113ed4d11c78856229a728abf031ebe747684e14  hi846.yaml
 4942edd551dcf51630246f71e600c17760d3574d5d45e5530d6cfeefe2c9ab1a812fbe220f8e89d92e19a499c592b2507c801ca4eb74cd15fcecb60bff5c650b  imx355.yaml
 285c6d0d712df341c0117c3762ddc139f53f44e6be36c3388d1a62696429175e2916f392163131e21f410c3676f02f5d125f375171f45f8d82ad278aa5076c62  imx363.yaml
 1b1f6d36311bee38006eaa1e380571fc9fbd5625fd72f63309426d3651483cef52a176d56cdebd2ce46cbb264684ede186740df169027d2bf27d0f3057da2f86  imx371.yaml
 1b1f6d36311bee38006eaa1e380571fc9fbd5625fd72f63309426d3651483cef52a176d56cdebd2ce46cbb264684ede186740df169027d2bf27d0f3057da2f86  imx376.yaml
 1b1f6d36311bee38006eaa1e380571fc9fbd5625fd72f63309426d3651483cef52a176d56cdebd2ce46cbb264684ede186740df169027d2bf27d0f3057da2f86  imx519.yaml
-55dab9dcb9b1982143b9d63e4e51138c5bffd7c8f4a8e4e122750b3ad9d475446956bc297d9f564819ade4be75a575d06633a064e14f8ba3ef77986783c5f067  imx800.yaml
+2ee566653b17d565d2c0de67cbe6ebad25df5aac6051cad78e6bae52016fa2ca0247e964d735ac776b3e0bd447ead9c4fcb26cd7629228cdba3ceb91b46f378f  imx800.yaml
 55dab9dcb9b1982143b9d63e4e51138c5bffd7c8f4a8e4e122750b3ad9d475446956bc297d9f564819ade4be75a575d06633a064e14f8ba3ef77986783c5f067  imx858.yaml
-2ee566653b17d565d2c0de67cbe6ebad25df5aac6051cad78e6bae52016fa2ca0247e964d735ac776b3e0bd447ead9c4fcb26cd7629228cdba3ceb91b46f378f  s5k3l6xx.yaml
+926933ed5aa6bc005471d8ddbbf49afaeb5034ac776c78bcba6655adc05b68be858923aac7887f8a8451a424113ed4d11c78856229a728abf031ebe747684e14  s5k3l6xx.yaml
 d59020e62520ee622282c85ce7bcdfe453c99becf48cc1005c5f8a4bb8b2511b19c89f38fb3c994e7c6a79d1f84e2ed5f5a09b4c5bdc1dc4a44b071dbccf0d44  s5kjn1.yaml
 "

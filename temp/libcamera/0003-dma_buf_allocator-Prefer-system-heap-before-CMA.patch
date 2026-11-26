@@ -1,0 +1,33 @@
+From: nura-meizu-m2381 downstream
+Subject: [PATCH] dma_buf_allocator: Try the system heap before CMA
+
+The allocator opens the FIRST provider device node that exists and never
+falls back when a later allocation fails (allocFromHeap has no fallback
+either).  On devices where a small default CMA pool is exported as
+/dev/dma_heap/reserved (32 MiB on SM8550 with CONFIG_CMA_SIZE_MBYTES=32),
+a SoftwareIsp output buffer for a full-resolution stream (4640x3488
+ABGR8888 = ~62 MiB) fails with ENOMEM and the camera pipeline reports
+"configuration not valid", even though the system heap can satisfy the
+same allocation fine.
+
+Try the system heap first so large buffers have a working path; the CMA
+heaps stay in the list and are still used when the system heap device
+node does not exist.  On platforms with an IOMMU (e.g. Qualcomm camss +
+Adreno SMMU) physical contiguity is not required for GPU/EGL imports of
+the debayered output.
+
+Signed-off-by: nura-meizu-m2381 <nura@nura.eco>
+---
+--- a/src/libcamera/dma_buf_allocator.cpp
++++ b/src/libcamera/dma_buf_allocator.cpp
+@@ -45,9 +45,9 @@
+ 	 * /dev/dma_heap/linux,cma is the CMA dma-heap. When the cma heap size is
+ 	 * specified on the kernel command line, this gets renamed to "reserved".
+ 	 */
++	{ DmaBufAllocator::DmaBufAllocatorFlag::SystemHeap, "/dev/dma_heap/system" },
+ 	{ DmaBufAllocator::DmaBufAllocatorFlag::CmaHeap, "/dev/dma_heap/linux,cma" },
+ 	{ DmaBufAllocator::DmaBufAllocatorFlag::CmaHeap, "/dev/dma_heap/reserved" },
+-	{ DmaBufAllocator::DmaBufAllocatorFlag::SystemHeap, "/dev/dma_heap/system" },
+ 	{ DmaBufAllocator::DmaBufAllocatorFlag::UDmaBuf, "/dev/udmabuf" },
+ } };
+ 
