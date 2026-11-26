@@ -11,7 +11,10 @@ enable meizu-retimer.service
 # .conf 清扫。
 enable meizu-quiet.service
 enable meizu-memsleep.service
-enable meizu-wfi.service
+# r86 (2026-11-27, 一百二十六深睡线): meizu-wfi.service 退役 —— 开机禁三簇深
+# cpuidle = 屏灭功耗真凶（0.9-1.1W→解禁 0.58W 档实证）；s2idle 7/7 全净挂不上
+# flakiness 翻案。unit 不再随包 ship；旧装机 mask 残链由 tmpfiles
+# meizu20-retire-wfi.conf 清扫（retire-pas 先例）。
 # r55: WoWLAN —— 睡=不断连（cfg80211 wow 块；无它则睡即 deauth/WiFi 死）
 enable meizu-wowlan.service
 enable meizu-noswr.service
