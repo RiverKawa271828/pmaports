@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=87
+pkgrel=88
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -342,6 +342,11 @@ options="!check !archcheck !pmb:crossdirect"
 # 中立）。补偿 carrier DNS 不落 resolved 的 NM push 缺口（r81 验收注记）；
 # FallbackDNS 仅在所有口无 DNS 时启用（WiFi 在 = 沉默），不改日常解析路径。
 # 根治仍挂 NM upstream 候补。
+# r88 (2026-11-27): +xwayland —— kwin_wayland 开机拉起 Xwayland 失败
+# （"kwin_xwl: Xwayland process failed to start"，pmOS plasma-minimal 不带该包）
+# 但保留监听 fd + 会话照发 DISPLAY=:0 ⇒ 监听 backlog=0 无人 accept，任何碰
+# DISPLAY 的应用 connect 永久阻塞（plasma-camera 图标启动静默挂死、QML 无窗口
+# 无崩溃无日志；su 直拉不带 DISPLAY = 纯 wayland 从不触雷，故 127 轮全绿）。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -351,6 +356,7 @@ depends="
 	qbootctl
 	busybox
 	systemd
+	xwayland
 	firmware-meizu-meizu20
 	e2fsprogs-extra
 	flatpak
