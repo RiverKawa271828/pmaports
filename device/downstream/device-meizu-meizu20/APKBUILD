@@ -25,7 +25,7 @@ maintainer="ri <ri@example.com>"
 pkgname=device-meizu-meizu20
 pkgdesc="Meizu 20 (meizu_20_CN, SM8550 / kalama)"
 pkgver=1
-pkgrel=88
+pkgrel=89
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
@@ -342,6 +342,17 @@ options="!check !archcheck !pmb:crossdirect"
 # 中立）。补偿 carrier DNS 不落 resolved 的 NM push 缺口（r81 验收注记）；
 # FallbackDNS 仅在所有口无 DNS 时启用（WiFi 在 = 沉默），不改日常解析路径。
 # 根治仍挂 NM upstream 候补。
+# r89 (2026-11-27, Flyme 取证轮回程镜像前置——机上直装件收编): 全新 userdata
+# 镜像要等价于现网日用态，机上 apk add 的直装件必须进 depends（依赖不进 world、
+# 重刷即丢）。清单 = /etc/apk/world 对 chroot 基线 + UI _pmb_recommends 的差分：
+# ① 128 轮拍照查看链四应用 koko/gwenview/kalk/qrca（calindori/alligator 用户已
+#    卸载，不收；krecorder/kclock 等已由 UI recommends 覆盖）；② gnss-share 两件
+#    （GNSS 共享，active）；③ ofono（106 乙探针残留，本机零枚举 inert，保态收编）；
+# ④ megapixels（MP 移植试验装机，conf 入包 + Padding 补丁 = 下一轮）；
+# ⑤ 调试三件 i2c-tools/v4l-utils/strace（历轮取证常备）；⑥ libcamera +
+#    libcamera-ipa 显式化——本地 temp/libcamera 99990.8.0-r2 版本最高自然胜出，
+#    IPA 子包显式防「apk add 主包 purge 子包」类缺席（127 坑册）。
+# 升级安全：现网全装，apk add 幂等零行为变化。
 # r88 (2026-11-27): +xwayland —— kwin_wayland 开机拉起 Xwayland 失败
 # （"kwin_xwl: Xwayland process failed to start"，pmOS plasma-minimal 不带该包）
 # 但保留监听 fd + 会话照发 DISPLAY=:0 ⇒ 监听 backlog=0 无人 accept，任何碰
@@ -383,6 +394,19 @@ depends="
 	postmarketos-base-ui-modemmanager-systemd
 	soc-qcom-modem-systemd
 	tqftpserv
+	gnss-share
+	gnss-share-systemd
+	ofono
+	megapixels
+	i2c-tools
+	v4l-utils
+	strace
+	koko
+	gwenview
+	kalk
+	qrca
+	libcamera
+	libcamera-ipa
 "
 makedepends="devicepkg-dev"
 	source="
