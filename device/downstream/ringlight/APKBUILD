@@ -1,0 +1,42 @@
+# Maintainer: nura-meizu-m2381 <dev@nura-meizu-m2381.invalid>
+# Status LED ring effects for Meizu 20 (dual SY7808 ring flash, 6 lamps).
+# Modular C engine: one effect = src/eff_<name>.c + one line in src/effects.c.
+# Canonical dev tree: nura repo tools/status-led/ringlight/ (keep byte-identical,
+# device-meizu-meizu20 r4 overlay-sync convention).
+pkgname=ringlight
+pkgver=0.1.0
+pkgrel=0
+pkgdesc="Status LED ring effects (chase/flow/breath) + boot animation, Meizu 20 SY7808"
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck !pmb:crossdirect"
+makedepends=""
+source="
+	80-ringlight.preset
+	ringlight-boot.service
+"
+# abuild "cleans" $srcdir between phases; with no real sources it defaults to
+# $startdir/src and would delete the bundled C tree. Redirect both to a
+# dedicated scratch dir (unpacks the two source= files there; C tree untouched).
+srcdir="$startdir/abuild-scratch"
+builddir="$srcdir"
+
+build() {
+	# compile in-place (never copy the tree), binary emitted to the scratch dir
+	make -C "$startdir" BIN="$builddir/ringlight"
+}
+
+package() {
+	install -Dm755 "$builddir"/ringlight \
+		"$pkgdir"/usr/bin/ringlight
+	install -Dm644 "$srcdir"/ringlight-boot.service \
+		"$pkgdir"/usr/lib/systemd/system/ringlight-boot.service
+	install -Dm644 "$srcdir"/80-ringlight.preset \
+		"$pkgdir"/usr/lib/systemd/system-preset/80-ringlight.preset
+}
+
+sha512sums="
+1da8ef9f1d5568295e318f26da22f2630ae29d8846339ba92e376cdaa9a1e071c02a50bedd73df91aeb8cff45af5cb598199973907fc37ad3387695696566dbd  80-ringlight.preset
+b4243281953cd06e917ca2b67410b37b5e2eeaff98382d9ce85686ec963545fa0709dc710341dc9c3798e13acd4ce2f66818d4b8bf652cf8c9132f29175c7423  ringlight-boot.service
+"
