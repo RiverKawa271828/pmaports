@@ -10,25 +10,30 @@
 # no uevents either (verified 2026-11-28: udevadm monitor shows zero
 # change events) - hence this poll loop. Any nonzero write to
 # white:flash/brightness becomes torch level 17 (=300mA stock clamp) on
-# both chips; 0 turns them off. Level 17 = max_brightness of white:flash
-# (255) clamped to the leds-sy7808 torch range.
-# rmmod window: ringlight-boot's ExecStartPre removes leds_sy7808; the
-# retry branch resets `last` so the state is re-applied once the module
-# (and the nodes) come back via ExecStopPost modprobe.
+# both chips; 0 turns them off.
+# ringlight-boot coexistence: the boot animation runs on raw i2c after
+# rmmod-ing leds_sy7808, so during the show the writes below fail
+# silently (nodes absent) and the animation is untouched; after the
+# show's ExecStopPost modprobe re-probes the driver (registers reset,
+# torch cleared), the periodic re-assert restores the torch to whatever
+# plasma still believes - no stuck "tile says on, lamps dark" state.
 # s2idle: systemd freezes services during suspend, so the loop costs
 # nothing while asleep.
 IN=/sys/class/leds/white:flash/brightness
 T1=/sys/class/leds/white:flash_1/brightness
 T2=/sys/class/leds/white:flash_2/brightness
 last=x
+n=0
 while :; do
-	b=$(cat "$IN" 2>/dev/null) || { last=x; sleep 1; continue; }
-	if [ "$b" != "$last" ]; then
+	b=$(cat "$IN" 2>/dev/null) || { sleep 1; continue; }
+	case "$b" in
+	0) v=0 ;;
+	*) v=17 ;;
+	esac
+	n=$((n + 1))
+	# apply on change, else re-assert every ~4.8s (12 x 0.4s)
+	if [ "$b" != "$last" ] || [ $((n % 12)) -eq 0 ]; then
 		last=$b
-		case "$b" in
-		0) v=0 ;;
-		*) v=17 ;;
-		esac
 		echo "$v" > "$T1" 2>/dev/null
 		echo "$v" > "$T2" 2>/dev/null
 	fi
