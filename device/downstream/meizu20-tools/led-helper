@@ -1,0 +1,32 @@
+#!/bin/sh
+# led-helper — root helper for Meizu20-Tools (invoked via pkexec; polkit
+# action org.meizu20.tools.led-control, auth_admin every time).
+#   arm <effect> : write the mode file, enable + restart the boot unit
+#   off          : write "off", disable + stop the boot unit (master off)
+# Anything else: refuse. Unit file ops stay inside this one script so the
+# polkit surface is exactly one custom action, not systemd unit management.
+set -e
+
+MODE_FILE=/var/lib/ringlight/mode
+UNIT=ringlight-boot.service
+
+case "$1" in
+arm)
+	[ $# -eq 2 ] || exit 2
+	case "$2" in
+	chase|flow|breath|alternate|breath2|random) ;;
+	*) exit 2 ;;
+	esac
+	printf '%s\n' "$2" > "$MODE_FILE"
+	/usr/bin/systemctl enable "$UNIT"
+	/usr/bin/systemctl restart "$UNIT"
+	;;
+off)
+	printf 'off\n' > "$MODE_FILE"
+	/usr/bin/systemctl disable "$UNIT" || true
+	/usr/bin/systemctl stop "$UNIT" || true
+	;;
+*)
+	exit 2
+	;;
+esac

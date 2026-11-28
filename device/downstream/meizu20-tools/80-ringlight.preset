@@ -1,4 +1,6 @@
-# RingLight boot animation: DEFAULT OFF on fresh flashes (user round 135+2).
-# The GUI's mode switch enables the unit on demand (polkit allows it
-# password-free for active local sessions); until then no light at boot.
-# Effects come from /var/lib/ringlight/mode (tmpfiles default: flow).
+# RingLight boot service is DISABLED on fresh flashes (user round 135+2:
+# fresh flash = no light at boot). The GUI arms it through the pkexec
+# helper (polkit action org.meizu20.tools.led-control, password EVERY
+# time — round 136: both arm and Lights off must confirm). The mode file
+# /var/lib/ringlight/mode (tmpfiles seed: "off") holds the armed effect.
+disable ringlight-boot.service
