@@ -1,0 +1,9 @@
+/* RingLight: let the active local session manage the boot-animation unit
+ * without a password (mode preview). Unit-scoped on purpose. */
+polkit.addRule(function(action, subject) {
+	if (action.id == "org.freedesktop.systemd1.manage-units" &&
+	    action.lookup("unit") == "ringlight-boot.service" &&
+	    subject.local && subject.active) {
+		return polkit.Result.YES;
+	}
+});

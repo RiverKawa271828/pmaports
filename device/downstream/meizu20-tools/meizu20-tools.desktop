@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Meizu20-Tools
+GenericName=Meizu 20 toolbox
+Comment=Meizu 20 utilities: LED ring effects and more
+Exec=/usr/bin/ringlight-gui
+Icon=phone
+Terminal=false
+Categories=Utility;Settings;

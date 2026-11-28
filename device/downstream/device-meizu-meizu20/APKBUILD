@@ -399,7 +399,7 @@ depends="
 	ofono
 	megapixels
 	i2c-tools
-	ringlight
+	meizu20-tools
 
 	v4l-utils
 	strace

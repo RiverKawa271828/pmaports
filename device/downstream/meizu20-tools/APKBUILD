@@ -1,0 +1,62 @@
+# Maintainer: nura-meizu-m2381 <dev@nura-meizu-m2381.invalid>
+# Status LED ring effects for Meizu 20 (dual SY7808 ring flash, 6 lamps).
+# Modular C engine: one effect = src/eff_<name>.c + one line in src/effects.c.
+# Canonical dev tree: nura repo tools/status-led/ringlight/ (keep byte-identical,
+# device-meizu-meizu20 r4 overlay-sync convention).
+pkgname=meizu20-tools
+pkgver=0.2.0
+pkgrel=0
+pkgdesc="Meizu 20 toolbox: LED ring effects (chase/flow/breath) + boot animation + GUI"
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck !pmb:crossdirect"
+makedepends="qt6-qtbase-dev qt6-qtdeclarative-dev"
+source="
+	50-ringlight.rules
+	80-ringlight.preset
+	ringlight-boot.service
+	meizu20-tools.desktop
+	ringlight.conf
+"
+# abuild "cleans" $srcdir between phases; with no real sources it defaults to
+# $startdir/src and would delete the bundled C tree. Redirect both to a
+# dedicated scratch dir (unpacks the source= files there; C tree untouched).
+srcdir="$startdir/abuild-scratch"
+builddir="$srcdir"
+
+build() {
+	# compile in-place (never copy the tree), binaries emitted to the scratch dir
+	make -C "$startdir" BIN="$builddir/ringlight"
+	/usr/lib/qt6/libexec/moc "$startdir/gui/main.cpp" -o "$builddir/main.moc"
+	g++ -O2 $CXXFLAGS -I"$builddir" "$startdir/gui/main.cpp" \
+		-o "$builddir/ringlight-gui" \
+		$(pkg-config --cflags --libs Qt6Quick Qt6Qml)
+}
+
+package() {
+	install -Dm755 "$builddir"/ringlight \
+		"$pkgdir"/usr/bin/ringlight
+	install -Dm755 "$builddir"/ringlight-gui \
+		"$pkgdir"/usr/bin/ringlight-gui
+	install -Dm644 "$startdir"/gui/RingLight.qml \
+		"$pkgdir"/usr/share/ringlight/RingLight.qml
+	install -Dm644 "$srcdir"/ringlight-boot.service \
+		"$pkgdir"/usr/lib/systemd/system/ringlight-boot.service
+	install -Dm644 "$srcdir"/80-ringlight.preset \
+		"$pkgdir"/usr/lib/systemd/system-preset/80-ringlight.preset
+	install -Dm644 "$srcdir"/meizu20-tools.desktop \
+		"$pkgdir"/usr/share/applications/meizu20-tools.desktop
+	install -Dm644 "$srcdir"/ringlight.conf \
+		"$pkgdir"/usr/lib/tmpfiles.d/ringlight.conf
+	install -Dm644 "$srcdir"/50-ringlight.rules \
+		"$pkgdir"/usr/share/polkit-1/rules.d/50-ringlight.rules
+}
+
+sha512sums="
+cfeba1992c769f4ed1c0f6a9cc1d3a0d89219d0d1f540454e70e61c0422b83d451ba37ce6850ad987ce287ade52a7690f9556939acbd88cd6467eb86fb494d89  50-ringlight.rules
+1da8ef9f1d5568295e318f26da22f2630ae29d8846339ba92e376cdaa9a1e071c02a50bedd73df91aeb8cff45af5cb598199973907fc37ad3387695696566dbd  80-ringlight.preset
+b4243281953cd06e917ca2b67410b37b5e2eeaff98382d9ce85686ec963545fa0709dc710341dc9c3798e13acd4ce2f66818d4b8bf652cf8c9132f29175c7423  ringlight-boot.service
+8a56cd04956c7f775275b73f0ce9985c7ac55b3c9940efc7887f9d6a030c3446e2eb013b571cac3620952731c9b0631f8698080acee6720de2155a9c3d101ac1  meizu20-tools.desktop
+6446abfcb9fef984525d865063e1448d8e9a0ba0cab4e29164d3ebb8fff771a40d187d10e8ea737c41faa023a0049047e4d60908cb8ba9ecffc7bf1254caccd4  ringlight.conf
+"
