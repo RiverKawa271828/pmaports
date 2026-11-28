@@ -1,4 +1,4 @@
-# ringlight: boot animation (effect from /etc/default/ringlight).
-# Self-terminates 10s after graphical.target; double watchdog = 300s in-daemon
-# cap + RuntimeMaxSec=600 (systemd kill) + ExecStopPost modprobe-back always.
-enable ringlight-boot.service
+# RingLight boot animation: DEFAULT OFF on fresh flashes (user round 135+2).
+# The GUI's mode switch enables the unit on demand (polkit allows it
+# password-free for active local sessions); until then no light at boot.
+# Effects come from /var/lib/ringlight/mode (tmpfiles default: flow).
