@@ -1,0 +1,14 @@
+[Unit]
+Description=Mirror plasma flashlight toggle to SY7808 torch LEDs (pm8550 white:flash is a dead channel)
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/meizu20/meizu-torch-mirror.sh
+Restart=on-failure
+RestartSec=5
+Nice=19
+CPUWeight=10
+
+[Install]
+WantedBy=multi-user.target

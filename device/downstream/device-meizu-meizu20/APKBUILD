@@ -358,6 +358,13 @@ options="!check !archcheck !pmb:crossdirect"
 # 但保留监听 fd + 会话照发 DISPLAY=:0 ⇒ 监听 backlog=0 无人 accept，任何碰
 # DISPLAY 的应用 connect 永久阻塞（plasma-camera 图标启动静默挂死、QML 无窗口
 # 无崩溃无日志；su 直拉不带 DISPLAY = 纯 wayland 从不触雷，故 127 轮全绿）。
+# r90 (2026-11-28, flashlight 快捷开关接线轮): plasma-mobile 的 flashlight
+# quicksetting 按 sysname glob "*:torch|*:flash" 选灯 → 本机唯一命中 =
+# pm8550 white:flash 死通道（灯电流由 SY7808 boost 供，stock 时代判词），真灯
+# white:flash_1/2 不沾 glob 且 sysname 无法用户态改名；brightness 写还不发
+# uevent（udevadm monitor 实测 0 条）→ 补 meizu-torch-mirror 两件（轮询 0.4s
+# 读死节点 brightness，非零=镜像 torch level 17 到 flash_1/2，零=灭；rmmod 窗
+# 重置重放）。preset enable（fresh 装机开箱可用；现网手工 enable 一次）。
 depends="
 	iw
 	linux-meizu-meizu20
@@ -487,6 +494,8 @@ makedepends="devicepkg-dev"
 	00-nura-qrtr-unmanaged.conf
 	meizu-mobile-data-cbnet.nmconnection
 	meizu-mobile-data-cmnet.nmconnection
+	meizu-torch-mirror.sh
+	meizu-torch-mirror.service
 "
 
 build() {
@@ -721,6 +730,11 @@ package() {
 		install -Dm644 "$srcdir/$u.service" \
 			"$pkgdir"/usr/lib/systemd/system/$u.service
 	done
+	# r90: flashlight quicksetting mirror (see r90 note above)
+	install -Dm755 "$srcdir/meizu-torch-mirror.sh" \
+		"$pkgdir"/usr/lib/meizu20/meizu-torch-mirror.sh
+	install -Dm644 "$srcdir/meizu-torch-mirror.service" \
+		"$pkgdir"/usr/lib/systemd/system/meizu-torch-mirror.service
 	# inert until the rmtfs apk leg lands (drop-in for an absent unit = no-op)
 	install -Dm644 "$srcdir/10-unlimited-retry.conf" \
 		"$pkgdir"/usr/lib/systemd/system/rmtfs.service.d/10-unlimited-retry.conf
@@ -758,7 +772,7 @@ aa684e2cb113d7abe78b45935d52b9bf38b0660198ae43be3ad4d7176f4ad7eaa9ad974a574bb2af
 1cfbc57174ea14cc0771dba916343bc41a703d046e3be38bad893eb71539ecf58c18108fba2bdf7fcea461d0d934b38dcb4161816984bce5fbb84e4eeaf281ca  70-meizu20-vibra.rules
 c33bd7cb8e0054144701c76db456c64c92f3631dabfd481a9ad47319a8edd868302514b2c692d2050d25c4cf4df34f82df5d1a7994436a591cc185e8ee7400b1  qbootctl-meizu.service
 c979e37311a45a64500f7b405f6f78ccbf718eadc3f9b9444e654ec204d6d7a009b04aa3c9d38c40e8221dbe886e105018c70d9418cf12e88a51af7622f4c944  71-meizu20-fastrpc-rootpd.rules
-53729012aba18b2a59371095d559a986224ee85a434a6aa6e0cf6f859294ec685fe0902946fdc8c8823be16999d7dc9ed416cdf8259c0d20ad750ffd34043800  80-device-meizu-meizu20.preset
+6f4402ccd29f1c4c8ab3294c8e7a4ab962489d55c726b4139d7760182d249fefd2e4327890b4885231626acb524aafc41c055093cc747455b6107c1e716f960e  80-device-meizu-meizu20.preset
 6386e9dc7f9dbfa83abd81bd4786c39c365f0dd91cf5ec85d601c23860840da15026ea5e741cfcc7682b42e08e89f886fdbcee641358077d5e527a7293c7fe57  meizu-touch-load.sh
 48ef95afe39a985a923e786813bd822bd08afdf1702edb32f3ae25962bd92069ba3d4f65564aabf67e894bd296b59998035518fa7c75b56df8a138ad15a2e9a1  meizu-amps-load.sh
 c1ca27a3f131ab18a8f1acaaeb52538648a562f50f6b94b954e782c02acaeb3e835b6fd6992e0a8c2b61783df388e8e4cb5dfa930557b51294ba7b6dd76451bc  meizu-audio-load.sh
@@ -826,4 +840,6 @@ d987fd43595210047d4f9143e33b6b3f08cef572369afbbc1be309108e140a15946210e43332a2a1
 2a19289ecec6ef5c6f7de694b96bcc2664d09cae9597daf8f08446bdf9f83d4e4e5b28bcd073b0f42f55ad64cad397244d00da42758bf0c54c05dec4bbe07eda  00-nura-qrtr-unmanaged.conf
 7702f75e6a88b9b35c2baf258b9e662b92cda5e19fca8cc8d0f71452527ea1ef0729964ba565bf28403159bf17fe104875c2600c35ee92e7370354b20df73958  meizu-mobile-data-cbnet.nmconnection
 b5669206e6fea637c770351e8f2de2e9325a5541fab86e9f2f314118b8fef3dbfc266f3e78ea9c1d11be1740baa1e6958c91543ba4e91553dfa653eb7e2caf5a  meizu-mobile-data-cmnet.nmconnection
+f885b7df68b5c8e0a54eda3bb72b197dbe6e4583f7f0871373b0cbc365e3d573b1e33876f2610b99cde7e844b2e50c3c6618e0eacab2e92bffc013729b4a95ee  meizu-torch-mirror.sh
+76f57b41189c0137844002078bbeb710547d1ce187683470e841ebaeb093740692d55335c38dc9187820f8be231b33f4b15c7a1cc8dc953f300f1f7fb612bb52  meizu-torch-mirror.service
 "
