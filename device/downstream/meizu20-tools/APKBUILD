@@ -12,11 +12,15 @@ license="MIT"
 arch="aarch64"
 options="!check !archcheck !pmb:crossdirect"
 makedepends="qt6-qtbase-dev qt6-qtdeclarative-dev"
-# C tree and GUI sources are declared in source= on purpose: pmbootstrap
-# refuses to copy an unlisted src/ dir ("leftover from abuild" guard, r6
-# build log) and abuild symlinks local sources into $srcdir. The scratch
-# redirect below keeps the in-place dev tree safe when abuild runs directly
-# in the aport dir (device-side build path).
+# C tree and GUI sources are declared FLAT in source= on purpose:
+# - abuild 3.18 keys checksums/verify by basename (filename_from_uri =
+#   ${1##*/}) — subdirectory source entries can never checksum-verify;
+# - pmbootstrap refuses to copy an unlisted src/ dir ("leftover from
+#   abuild" guard, r6 build log).
+# The basename symlinks at the tree root (core.c -> src/core.c, …,
+# main.cpp -> gui/main.cpp) satisfy both tools; abuild symlinks them into
+# $srcdir. The scratch redirect keeps the in-place dev tree safe when
+# abuild runs directly in the aport dir (device-side build path).
 source="
 	50-ringlight.rules
 	80-ringlight.preset
@@ -25,28 +29,28 @@ source="
 	ringlight.conf
 	org.meizu20.tools.policy
 	led-helper
-	src/core.c
-	src/core.h
-	src/effects.c
-	src/effects.h
-	src/main.c
-	src/eff_chase.c
-	src/eff_flow.c
-	src/eff_breath.c
-	src/eff_alternate.c
-	src/eff_breath2.c
-	src/eff_random.c
-	gui/main.cpp
-	gui/RingLight.qml
+	core.c
+	core.h
+	effects.c
+	effects.h
+	main.c
+	eff_chase.c
+	eff_flow.c
+	eff_breath.c
+	eff_alternate.c
+	eff_breath2.c
+	eff_random.c
+	main.cpp
+	RingLight.qml
 "
 srcdir="$startdir/abuild-scratch"
 builddir="$srcdir"
 
 build() {
-	# C engine + Qt GUI from the source= copies in $srcdir
-	gcc $CFLAGS -o "$builddir"/ringlight "$srcdir"/src/*.c
-	/usr/lib/qt6/libexec/moc "$srcdir"/gui/main.cpp -o "$builddir"/main.moc
-	g++ -O2 $CXXFLAGS -I"$builddir" "$srcdir"/gui/main.cpp \
+	# C engine + Qt GUI from the source= symlinks in $srcdir
+	gcc $CFLAGS -o "$builddir"/ringlight "$srcdir"/*.c
+	/usr/lib/qt6/libexec/moc "$srcdir"/main.cpp -o "$builddir"/main.moc
+	g++ -O2 $CXXFLAGS -I"$builddir" "$srcdir"/main.cpp \
 		-o "$builddir"/ringlight-gui \
 		$(pkg-config --cflags --libs Qt6Quick Qt6Qml)
 }
@@ -56,7 +60,7 @@ package() {
 		"$pkgdir"/usr/bin/ringlight
 	install -Dm755 "$builddir"/ringlight-gui \
 		"$pkgdir"/usr/bin/ringlight-gui
-	install -Dm644 "$srcdir"/gui/RingLight.qml \
+	install -Dm644 "$srcdir"/RingLight.qml \
 		"$pkgdir"/usr/share/ringlight/RingLight.qml
 	install -Dm644 "$srcdir"/ringlight-boot.service \
 		"$pkgdir"/usr/lib/systemd/system/ringlight-boot.service
@@ -82,17 +86,17 @@ b4243281953cd06e917ca2b67410b37b5e2eeaff98382d9ce85686ec963545fa0709dc710341dc9c
 bd5d5999c2f2d5e28406139984d3e097f8be4c23bc92490da4a25fae56ed9a7cb19f276ad00017519cc4348efa7ef3d63fb43becde0ea0eea677a75658647d83  ringlight.conf
 d7a1de7baeb339856631e3946deee1d3a01a06349d5b456fed257dd816e7beadcd3c3e266a40d05594ee39119d58a531138c8d438f74848312a188817d10d1f8  org.meizu20.tools.policy
 07c2e8a00c0c1815ce06982c6e66a11662dbafa102b7f0c176f057dff879bc27eae618e162bf28fb06949f7befc5a889b0af36f2e2d0c0c14248e9010e4a328f  led-helper
-7f4bbfcf2beeeabd2adfb50774fcedde2aadc790b0e721f150b7cb063a0bcf338172840ea0fc84778ccbfae15c5a51bcaa8de975d25343a7371ab945048de21a  src/core.c
-88e4d4cae6aebb0bea3e77771f9c6d01c8c7089195c6a846d4c6637c2b3abf389b33480969e6a59ccb7fc5f7010cf9364c7bb3e8cb7d6822ef2ca4a9b4234bb5  src/core.h
-9933f7c4862624b818dae7ab363e59ea3c6705963fc3fda44e3cc6e2ced6fc432ea716b2e7241323e5a66290eab3d8f1d9abc70d6402fcbe7e16c3f4c6dacb72  src/effects.c
-493ee57bece515a7f481e9489a0c0c0bab5509d99d305f372ba95b80395eee76c7f750feb35112692481f59f0c6c03a064257da1cbf4762df9eef38836471965  src/effects.h
-35076eaa9890cd0442eaf0d326b0be898fbb4411be8a8bb3beaca6a7ce565d152417be0b59a16782aaaf538b3b48d99be1e85f809e238d5e9cdd5dc3bc44bc67  src/main.c
-d1668e6cdd0783af232ad632f02bfcea27252cefeaf4fff75b3687ea480543e30849244363894bf094b8d2aa681fe810cec7cc8c78524e1c0a06687a9abd45a9  src/eff_chase.c
-b47be7e8905f34c9b4bab3e56b6aa80f5761630d160b9d87d95041add417edca9abc359dfdeeb931ea680a0e05a733cb5f37e93bbee01c44ba3c9f76f0b84957  src/eff_flow.c
-cc61b3bbd98aed602ea6ebe934fd4e9335bf928ea206936106e61b693a8292e0692bd040c31390496a7b07bf92b0d5ad71a88e2da03b3ffeaacd89c156c0eb23  src/eff_breath.c
-df79b6f5315411faec713648de58b34efea96ead115391d6c1d830abf7a0b12117e08a3e141bef82eaa6b1e9812cf49802b822b3bb4ff3a5f4c47aaec659ce47  src/eff_alternate.c
-097de7f14d3ff3fc068447f765c5eeca32f0c35288f5a1fbc11867cf37b499f00f43a4a15d3c486648978dbb9767875507b39a9129950e2b8444b18378395d3c  src/eff_breath2.c
-f60543c016d53151340fa43486b80b6ab467e0917a4117ec7d3c949136052f788aca02670efc2a8d0b1fc162f19bd529bb7c97de0760e34cf36863e62dfa9891  src/eff_random.c
-26307e98ba7842abfe9b9526c21e45d8ee8b4b6a8d983bc9db90bdde03e06b1843a2bc0f48fd078c18e1be955c138ae9e1bbba62c2c98a29a3dcf96c065c7828  gui/main.cpp
-29f7a7f666a09389134b2bf1baa77a5eecf733ef175e0b63bc38021989f225c962a61745d66577d06c20542d88a062a59ff2b51bd5953641b676d6544b957298  gui/RingLight.qml
+7f4bbfcf2beeeabd2adfb50774fcedde2aadc790b0e721f150b7cb063a0bcf338172840ea0fc84778ccbfae15c5a51bcaa8de975d25343a7371ab945048de21a  core.c
+88e4d4cae6aebb0bea3e77771f9c6d01c8c7089195c6a846d4c6637c2b3abf389b33480969e6a59ccb7fc5f7010cf9364c7bb3e8cb7d6822ef2ca4a9b4234bb5  core.h
+9933f7c4862624b818dae7ab363e59ea3c6705963fc3fda44e3cc6e2ced6fc432ea716b2e7241323e5a66290eab3d8f1d9abc70d6402fcbe7e16c3f4c6dacb72  effects.c
+493ee57bece515a7f481e9489a0c0c0bab5509d99d305f372ba95b80395eee76c7f750feb35112692481f59f0c6c03a064257da1cbf4762df9eef38836471965  effects.h
+35076eaa9890cd0442eaf0d326b0be898fbb4411be8a8bb3beaca6a7ce565d152417be0b59a16782aaaf538b3b48d99be1e85f809e238d5e9cdd5dc3bc44bc67  main.c
+d1668e6cdd0783af232ad632f02bfcea27252cefeaf4fff75b3687ea480543e30849244363894bf094b8d2aa681fe810cec7cc8c78524e1c0a06687a9abd45a9  eff_chase.c
+b47be7e8905f34c9b4bab3e56b6aa80f5761630d160b9d87d95041add417edca9abc359dfdeeb931ea680a0e05a733cb5f37e93bbee01c44ba3c9f76f0b84957  eff_flow.c
+cc61b3bbd98aed602ea6ebe934fd4e9335bf928ea206936106e61b693a8292e0692bd040c31390496a7b07bf92b0d5ad71a88e2da03b3ffeaacd89c156c0eb23  eff_breath.c
+df79b6f5315411faec713648de58b34efea96ead115391d6c1d830abf7a0b12117e08a3e141bef82eaa6b1e9812cf49802b822b3bb4ff3a5f4c47aaec659ce47  eff_alternate.c
+097de7f14d3ff3fc068447f765c5eeca32f0c35288f5a1fbc11867cf37b499f00f43a4a15d3c486648978dbb9767875507b39a9129950e2b8444b18378395d3c  eff_breath2.c
+f60543c016d53151340fa43486b80b6ab467e0917a4117ec7d3c949136052f788aca02670efc2a8d0b1fc162f19bd529bb7c97de0760e34cf36863e62dfa9891  eff_random.c
+26307e98ba7842abfe9b9526c21e45d8ee8b4b6a8d983bc9db90bdde03e06b1843a2bc0f48fd078c18e1be955c138ae9e1bbba62c2c98a29a3dcf96c065c7828  main.cpp
+29f7a7f666a09389134b2bf1baa77a5eecf733ef175e0b63bc38021989f225c962a61745d66577d06c20542d88a062a59ff2b51bd5953641b676d6544b957298  RingLight.qml
 "
