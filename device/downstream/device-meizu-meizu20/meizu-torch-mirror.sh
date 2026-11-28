@@ -16,19 +16,26 @@
 # animation runs on raw i2c after rmmod-ing leds_sy7808, so while a show
 # is playing the writes below fail (nodes absent).
 #   - show started while torch on: rmmod seizes the chips instantly
-#     (show wins for its duration); the periodic re-assert restores the
-#     torch after the show's ExecStopPost modprobe, matching what the
-#     plasma tile still says.
-#   - torch turned ON while a show is playing: the failed write detects
-#     the show and STOPS it (flashlight wins); modprobe returns the
-#     nodes and the next poll applies the torch.
+#     (show wins for its duration); after the show's ExecStopPost
+#     modprobe the pending old-state restore re-applies the torch.
+#   - torch turned ON while a show is playing (fresh user action): the
+#     failed write detects the show and STOPS it (flashlight wins).
 #   - "off" during a show is a no-op (no override intent).
+# v4 fix (user-reported long dark gap): the v3 override trigger sat on
+# the periodic re-assert path too, so a pre-show torch killed a freshly
+# started show ~4.8s in (the later action must win) and the torch then
+# waited for the next 4.8s boundary. Now the two intents are separate
+# flags: a fresh change may stop the show; the pre-show restore only
+# retries (every tick, not on the 4.8s boundary) - the post-show gap
+# collapses to the show's own modprobe time (~1s).
 # s2idle: systemd freezes services during suspend, so the loop costs
 # nothing while asleep.
 IN=/sys/class/leds/white:flash/brightness
 T1=/sys/class/leds/white:flash_1/brightness
 T2=/sys/class/leds/white:flash_2/brightness
 last=x
+force=0  # fresh user change pending: may override (stop) a show
+retry=0  # pending apply, never overrides (old-state restore / show wait)
 n=0
 while :; do
 	b=$(cat "$IN" 2>/dev/null) || { sleep 1; continue; }
@@ -36,17 +43,22 @@ while :; do
 	0) v=0 ;;
 	*) v=17 ;;
 	esac
+	if [ "$b" != "$last" ]; then
+		force=1
+		retry=1
+	fi
 	n=$((n + 1))
-	if [ "$b" != "$last" ] || [ $((n % 12)) -eq 0 ]; then
+	if [ "$force" = 1 ] || [ "$retry" = 1 ] || [ $((n % 12)) -eq 0 ]; then
 		if echo "$v" > "$T1" 2>/dev/null; then
 			echo "$v" > "$T2" 2>/dev/null
 			last=$b
-		elif [ "$v" != 0 ]; then
-			# nodes absent = a ringlight show owns the chips:
-			# flashlight overrides, stop the show. ExecStopPost
-			# modprobe brings the nodes back and the next poll
-			# applies the torch.
-			systemctl stop ringlight-boot.service 2>/dev/null
+			force=0
+			retry=0
+		else
+			# nodes absent = a ringlight show owns the chips
+			[ "$force" = 1 ] && [ "$v" != 0 ] && \
+				systemctl stop ringlight-boot.service 2>/dev/null
+			retry=1
 		fi
 	fi
 	sleep 0.4
