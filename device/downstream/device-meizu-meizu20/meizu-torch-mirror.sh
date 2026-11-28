@@ -10,13 +10,19 @@
 # no uevents either (verified 2026-11-28: udevadm monitor shows zero
 # change events) - hence this poll loop. Any nonzero write to
 # white:flash/brightness becomes torch level 17 (=300mA stock clamp) on
-# both chips; 0 turns them off.
-# ringlight-boot coexistence: the boot animation runs on raw i2c after
-# rmmod-ing leds_sy7808, so during the show the writes below fail
-# silently (nodes absent) and the animation is untouched; after the
-# show's ExecStopPost modprobe re-probes the driver (registers reset,
-# torch cleared), the periodic re-assert restores the torch to whatever
-# plasma still believes - no stuck "tile says on, lamps dark" state.
+# both chips; 0 turns them off. Level 17 = max_brightness of white:flash
+# (255) clamped to the leds-sy7808 torch range.
+# Mutual override with ringlight-boot (user round 136+3): the boot
+# animation runs on raw i2c after rmmod-ing leds_sy7808, so while a show
+# is playing the writes below fail (nodes absent).
+#   - show started while torch on: rmmod seizes the chips instantly
+#     (show wins for its duration); the periodic re-assert restores the
+#     torch after the show's ExecStopPost modprobe, matching what the
+#     plasma tile still says.
+#   - torch turned ON while a show is playing: the failed write detects
+#     the show and STOPS it (flashlight wins); modprobe returns the
+#     nodes and the next poll applies the torch.
+#   - "off" during a show is a no-op (no override intent).
 # s2idle: systemd freezes services during suspend, so the loop costs
 # nothing while asleep.
 IN=/sys/class/leds/white:flash/brightness
@@ -31,11 +37,17 @@ while :; do
 	*) v=17 ;;
 	esac
 	n=$((n + 1))
-	# apply on change, else re-assert every ~4.8s (12 x 0.4s)
 	if [ "$b" != "$last" ] || [ $((n % 12)) -eq 0 ]; then
-		last=$b
-		echo "$v" > "$T1" 2>/dev/null
-		echo "$v" > "$T2" 2>/dev/null
+		if echo "$v" > "$T1" 2>/dev/null; then
+			echo "$v" > "$T2" 2>/dev/null
+			last=$b
+		elif [ "$v" != 0 ]; then
+			# nodes absent = a ringlight show owns the chips:
+			# flashlight overrides, stop the show. ExecStopPost
+			# modprobe brings the nodes back and the next poll
+			# applies the torch.
+			systemctl stop ringlight-boot.service 2>/dev/null
+		fi
 	fi
 	sleep 0.4
 done
